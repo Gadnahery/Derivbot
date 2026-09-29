@@ -3,15 +3,17 @@ const {
   getRecentScans,
   getRecentTrades,
   getOpenTrade,
+  getTradeStats,
 } = require("../../lib/supabase");
 
 export default async function handler(req, res) {
   try {
-    const [journal, scans, trades, open] = await Promise.all([
-      getRecentJournal(50),
-      getRecentScans(20),
-      getRecentTrades(20),
+    const [journal, scans, trades, open, stats] = await Promise.all([
+      getRecentJournal(100),
+      getRecentScans(50),
+      getRecentTrades(100),
       getOpenTrade(),
+      getTradeStats(),
     ]);
     return res.status(200).json({
       ok: true,
@@ -19,6 +21,7 @@ export default async function handler(req, res) {
       journal,
       scans,
       trades,
+      stats,
       at: new Date().toISOString(),
     });
   } catch (err) {

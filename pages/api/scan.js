@@ -5,6 +5,8 @@ const {
   saveScanResult,
   getOpenTrade,
   saveTrade,
+  updateTrade,
+  computePnl,
   getSeenKeys,
 } = require("../../lib/supabase");
 
@@ -28,29 +30,80 @@ export default async function handler(req, res) {
   const started = Date.now();
   const results = [];
   let tradePlaced = null;
+  let openManaged = null;
 
   try {
-    const open = await getOpenTrade();
-    if (open) {
-      await logEvent({ stage: "scan", status: "skip", message: "Trade already open." });
-      return res.status(200).json({
-        ok: true,
-        skipped: true,
-        reason: "open_trade",
-        openTrade: open,
-        ms: Date.now() - started,
-      });
-    }
-
-    const seen = await getSeenKeys();
     const deriv = new DerivClient();
-    // PAT flow: resolve OTP session URL first, then connect (do not hit classic WS)
     await deriv.authorize();
     await logEvent({
       stage: "auth",
       status: "ok",
       message: `Authorized ${deriv.loginid} balance=${deriv.balance} ${deriv.currency}`,
     });
+
+    // ── Manage open trade: mark price, unrealized PnL, settle SL/TP ──
+    const open = await getOpenTrade();
+    if (open) {
+      try {
+        const m1 = await deriv.fetchCandles(open.symbol, 60, 5);
+        const price = m1.length ? m1[m1.length - 1].close : null;
+        if (price != null) {
+          const { unrealized, hit, settledPnl, rMultiple } = computePnl(open, price);
+          if (hit) {
+            const settled = await updateTrade(open.id, {
+              status: hit,
+              exit_price: price,
+              current_price: price,
+              pnl: settledPnl,
+              unrealized_pnl: 0,
+              settled_at: new Date().toISOString(),
+            });
+            openManaged = settled;
+            await logEvent({
+              stage: "settle",
+              status: hit === "won" ? "ok" : "fail",
+              symbol: open.symbol,
+              message: `Trade ${hit.toUpperCase()} @ ${price} · PnL ${settledPnl >= 0 ? "+" : ""}${Number(settledPnl).toFixed(2)} USD (${rMultiple.toFixed(2)}R)`,
+              payload: { price, settledPnl, hit },
+            });
+          } else {
+            const updated = await updateTrade(open.id, {
+              current_price: price,
+              unrealized_pnl: unrealized,
+            });
+            openManaged = updated;
+            await logEvent({
+              stage: "mark",
+              status: "ok",
+              symbol: open.symbol,
+              message: `Open ${open.side} mark ${price} · uPnL ${unrealized >= 0 ? "+" : ""}${unrealized.toFixed(2)} USD (${rMultiple.toFixed(2)}R)`,
+            });
+          }
+        }
+      } catch (e) {
+        await logEvent({
+          stage: "mark",
+          status: "fail",
+          symbol: open.symbol,
+          message: `Mark failed: ${e.message}`,
+        });
+      }
+
+      // Still one trade at a time — do not open new while one is open
+      const stillOpen = await getOpenTrade();
+      if (stillOpen) {
+        deriv.close();
+        return res.status(200).json({
+          ok: true,
+          skipped: true,
+          reason: "open_trade",
+          openTrade: openManaged || stillOpen,
+          ms: Date.now() - started,
+        });
+      }
+    }
+
+    const seen = await getSeenKeys();
 
     for (const info of WATCHLIST) {
       try {
@@ -114,25 +167,31 @@ export default async function handler(req, res) {
               status: "open",
               contractId: bought.contractId,
               note: `key:${key}`,
+              execution: "live",
+              current_price: setup.entry,
+              unrealized_pnl: 0,
             });
             await logEvent({
               stage: "fill",
               status: "ok",
               symbol: info.symbol,
-              message: `LIVE FILL ${bought.contractId}`,
+              message: `LIVE FILL ${bought.contractId} stake=${MIN_STAKE}`,
             });
           } catch (err) {
             tradePlaced = await saveTrade({
               ...setup,
               stake: MIN_STAKE,
-              status: "paper",
-              note: `key:${key} | ${err.message}`,
+              status: "open",
+              note: `key:${key} | paper: ${err.message}`,
+              execution: "paper",
+              current_price: setup.entry,
+              unrealized_pnl: 0,
             });
             await logEvent({
               stage: "fill",
               status: "fail",
               symbol: info.symbol,
-              message: `Buy failed (paper): ${err.message}`,
+              message: `Live buy failed — paper trade opened: ${err.message}`,
             });
           }
           break;
@@ -154,6 +213,7 @@ export default async function handler(req, res) {
       ms: Date.now() - started,
       results,
       tradePlaced,
+      openManaged,
     });
   } catch (err) {
     await logEvent({ stage: "fatal", status: "fail", message: err.message });

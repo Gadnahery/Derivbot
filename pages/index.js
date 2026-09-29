@@ -35,6 +35,13 @@ function statusColor(s) {
   return "#8899aa";
 }
 
+function fmtUsd(n) {
+  if (n == null || Number.isNaN(Number(n))) return "—";
+  const v = Number(n);
+  const sign = v > 0 ? "+" : "";
+  return `${sign}${v.toFixed(2)} USD`;
+}
+
 function fmtTime(iso) {
   if (!iso) return "—";
   try {
@@ -122,7 +129,7 @@ export default function Desk() {
 
   useEffect(() => {
     loadStatus();
-    const t = setInterval(loadStatus, 15000);
+    const t = setInterval(loadStatus, 8000);
     return () => clearInterval(t);
   }, [loadStatus]);
 
@@ -328,6 +335,24 @@ export default function Desk() {
       </header>
 
       {err && <div style={S.error}>Error: {err}</div>}
+      {data?.stats && (
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+          {[
+            ["Closed", data.stats.closed],
+            ["Wins", data.stats.wins],
+            ["Losses", data.stats.losses],
+            ["Win rate", data.stats.closed ? `${(data.stats.winRate * 100).toFixed(0)}%` : "—"],
+            ["Total PnL", fmtUsd(data.stats.totalPnl)],
+            ["Open", data.stats.open],
+          ].map(([k, v]) => (
+            <div key={k} style={{ background: "#0d1117", border: "1px solid #1a2332", borderRadius: 10, padding: "8px 12px", minWidth: 90 }}>
+              <div style={{ fontSize: 10, opacity: 0.5, textTransform: "uppercase" }}>{k}</div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: k === "Total PnL" ? (Number(data.stats.totalPnl) >= 0 ? "#3dd68c" : "#f07178") : "#e8eef5" }}>{v}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
 
       <div style={S.grid} className="desk-grid">
         {/* Left: symbols */}
@@ -425,12 +450,16 @@ export default function Desk() {
         {/* Right: trades + journal */}
         <aside style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {open && (
-            <section style={{ ...S.panel, borderColor: "#3a2040" }}>
-              <div style={S.panelTitle}>Open trade</div>
-              <div style={{ fontSize: 13, lineHeight: 1.6 }}>
-                <div><b>{open.side?.toUpperCase()}</b> {open.symbol_name || open.symbol}</div>
-                <div>Entry {open.entry} · SL {open.sl} · TP {open.tp}</div>
-                <div>R:R {Number(open.rr).toFixed(2)} · {open.status}</div>
+            <section style={{ ...S.panel, borderColor: Number(open.unrealized_pnl) >= 0 ? "#1a3d2a" : "#3a2040" }}>
+              <div style={S.panelTitle}>Open trade · live PnL</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: Number(open.unrealized_pnl) >= 0 ? "#3dd68c" : "#f07178", marginBottom: 8 }}>
+                {fmtUsd(open.unrealized_pnl)}
+              </div>
+              <div style={{ fontSize: 13, lineHeight: 1.65 }}>
+                <div><b style={{ color: open.side === "buy" ? "#3dd68c" : "#f07178" }}>{open.side?.toUpperCase()}</b> {open.symbol_name || open.symbol}</div>
+                <div>Mark <b>{open.current_price != null ? Number(open.current_price).toFixed(5) : "—"}</b></div>
+                <div>Entry {Number(open.entry).toFixed(5)} · SL {Number(open.sl).toFixed(5)} · TP {Number(open.tp).toFixed(5)}</div>
+                <div>Stake {open.stake} · R:R {Number(open.rr).toFixed(2)} · {open.execution || "—"}</div>
                 {open.contract_id && <div style={{ opacity: 0.6 }}>Contract {open.contract_id}</div>}
               </div>
             </section>
@@ -451,8 +480,11 @@ export default function Desk() {
                     </span>
                     <span style={{ fontSize: 11, color: statusColor(t.status) }}>{t.status}</span>
                   </div>
-                  <div style={{ fontSize: 11, opacity: 0.6 }}>
-                    {Number(t.rr).toFixed(1)}R · {fmtTime(t.at)}
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginTop: 2 }}>
+                    <span style={{ color: Number(t.status === "open" ? t.unrealized_pnl : t.pnl) >= 0 ? "#3dd68c" : "#f07178", fontWeight: 700 }}>
+                      {t.status === "open" ? fmtUsd(t.unrealized_pnl) : t.pnl != null ? fmtUsd(t.pnl) : "—"}
+                    </span>
+                    <span style={{ opacity: 0.55 }}>{Number(t.rr).toFixed(1)}R · {fmtTime(t.at)}</span>
                   </div>
                 </div>
               ))}

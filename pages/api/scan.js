@@ -8,6 +8,7 @@ const {
   updateTrade,
   computePnl,
   getSeenKeys,
+  hasTradeKey,
 } = require("../../lib/supabase");
 
 export const config = {
@@ -154,6 +155,19 @@ export default async function handler(req, res) {
             payload: setup,
           });
 
+          // Hard guarantee: one trade per setup key
+          const existing = await hasTradeKey(key);
+          if (existing) {
+            await logEvent({
+              stage: "setup",
+              status: "skip",
+              symbol: info.symbol,
+              message: `Already one trade for this setup (id ${existing.id}).`,
+            });
+            seen.add(key);
+            continue;
+          }
+
           try {
             const bought = await deriv.proposalAndBuy(
               setup.side,
@@ -171,29 +185,34 @@ export default async function handler(req, res) {
               current_price: setup.entry,
               unrealized_pnl: 0,
             });
+            seen.add(key);
             await logEvent({
               stage: "fill",
               status: "ok",
               symbol: info.symbol,
-              message: `LIVE FILL ${bought.contractId} stake=${MIN_STAKE}`,
+              message: `LIVE FILL ${bought.contractId} stake=${MIN_STAKE} · ${setup.side} ${Number(setup.rr).toFixed(1)}R`,
             });
           } catch (err) {
+            // Paper record only — does NOT stay "open" (won't block new different setups)
             tradePlaced = await saveTrade({
               ...setup,
               stake: MIN_STAKE,
-              status: "open",
+              status: "paper",
               note: `key:${key} | paper: ${err.message}`,
               execution: "paper",
               current_price: setup.entry,
               unrealized_pnl: 0,
+              pnl: null,
             });
+            seen.add(key);
             await logEvent({
               stage: "fill",
               status: "fail",
               symbol: info.symbol,
-              message: `Live buy failed — paper trade opened: ${err.message}`,
+              message: `Buy failed — recorded paper only (no open position): ${err.message}`,
             });
           }
+          // Only one new trade attempt per scan cycle
           break;
         }
       } catch (symErr) {

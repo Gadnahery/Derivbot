@@ -218,6 +218,36 @@ export default function ChartPage() {
       }
     }
 
+
+    // Historical trades for this symbol (entry markers)
+    const trades = (data?.trades || []).filter((tr) => tr.symbol === symbol);
+    if (trades.length && series.setMarkers) {
+      const markers = [];
+      for (const tr of trades.slice(0, 12)) {
+        let tsec = null;
+        try { tsec = Math.floor(new Date(tr.at).getTime() / 1000); } catch {}
+        if (!tsec || !candles.length) continue;
+        let nearest = candles[0].time;
+        let best = Math.abs(candles[0].time - tsec);
+        for (const c of candles) {
+          const d = Math.abs(c.time - tsec);
+          if (d < best) { best = d; nearest = c.time; }
+        }
+        const won = tr.status === "won";
+        const lost = tr.status === "lost";
+        markers.push({
+          time: nearest,
+          position: tr.side === "buy" ? "belowBar" : "aboveBar",
+          color: won ? "#3dd68c" : lost ? "#f07178" : "#e6c07b",
+          shape: tr.side === "buy" ? "arrowUp" : "arrowDown",
+          text: `${(tr.side || "").toUpperCase()} ${tr.rr != null ? Number(tr.rr).toFixed(1) + "R" : ""} ${tr.status || ""}`.trim(),
+        });
+      }
+      if (markers.length) {
+        try { series.setMarkers(markers); } catch {}
+      }
+    }
+
     chartApi.current.timeScale().fitContent();
   }, [candles, symbol, data, open]);
 

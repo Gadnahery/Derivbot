@@ -13,42 +13,37 @@ const NAV = [
 
 export default function Layout({ children, scanning, onScan, onRefresh, statusLabel }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [wide, setWide] = useState(true);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 900px)");
-    const apply = () => setWide(mq.matches);
+    const apply = () => {
+      setWide(mq.matches);
+      if (mq.matches) setMenuOpen(false);
+    };
     apply();
     mq.addEventListener("change", apply);
     return () => mq.removeEventListener("change", apply);
   }, []);
 
   useEffect(() => {
-    const close = () => setOpen(false);
+    const close = () => setMenuOpen(false);
     router.events?.on("routeChangeStart", close);
     return () => router.events?.off("routeChangeStart", close);
   }, [router]);
 
-  const showSidebar = wide || open;
-
   return (
     <div className="desk-shell" style={S.shell}>
-      {/* Mobile top bar */}
       {!wide && (
         <header className="desk-topbar" style={S.topbar}>
-          <button
-            type="button"
-            aria-label="Menu"
-            onClick={() => setOpen((v) => !v)}
-            style={S.iconBtn}
-          >
-            {open ? "✕" : "☰"}
+          <button type="button" aria-label="Menu" onClick={() => setMenuOpen((v) => !v)} style={S.iconBtn}>
+            {menuOpen ? "✕" : "☰"}
           </button>
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
             <div style={{ fontWeight: 800, fontSize: 13, letterSpacing: 1 }}>STRATEGY DESK</div>
-            <div style={{ fontSize: 11, opacity: 0.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {statusLabel || "STANDBY"}
+            <div style={{ fontSize: 11, opacity: 0.55, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {scanning ? "SCANNING…" : statusLabel || "STANDBY"}
             </div>
           </div>
           <button type="button" style={S.scanBtnSm} onClick={onScan} disabled={scanning}>
@@ -57,13 +52,11 @@ export default function Layout({ children, scanning, onScan, onRefresh, statusLa
         </header>
       )}
 
-      {/* Backdrop on mobile */}
-      {!wide && open && (
-        <div className="desk-backdrop" style={S.backdrop} onClick={() => setOpen(false)} />
+      {!wide && menuOpen && (
+        <div style={S.backdrop} onClick={() => setMenuOpen(false)} />
       )}
 
       <aside
-        className="desk-sidebar"
         style={{
           ...S.sidebar,
           ...(wide
@@ -73,10 +66,11 @@ export default function Layout({ children, scanning, onScan, onRefresh, statusLa
                 left: 0,
                 top: 0,
                 bottom: 0,
-                zIndex: 40,
-                transform: open ? "translateX(0)" : "translateX(-105%)",
+                zIndex: 50,
+                transform: menuOpen ? "translateX(0)" : "translateX(-110%)",
                 transition: "transform 0.2s ease",
-                boxShadow: open ? "8px 0 32px rgba(0,0,0,0.45)" : "none",
+                boxShadow: menuOpen ? "8px 0 32px rgba(0,0,0,0.5)" : "none",
+                width: "min(280px, 86vw)",
               }),
         }}
       >
@@ -87,10 +81,7 @@ export default function Layout({ children, scanning, onScan, onRefresh, statusLa
             const active = router.pathname === item.href;
             return (
               <Link key={item.href} href={item.href} legacyBehavior>
-                <a
-                  style={{ ...S.navItem, ...(active ? S.navActive : {}) }}
-                  onClick={() => setOpen(false)}
-                >
+                <a style={{ ...S.navItem, ...(active ? S.navActive : {}) }} onClick={() => setMenuOpen(false)}>
                   <div style={{ fontWeight: 650 }}>{item.label}</div>
                   <div style={{ fontSize: 11, opacity: 0.5 }}>{item.tip}</div>
                 </a>
@@ -100,24 +91,30 @@ export default function Layout({ children, scanning, onScan, onRefresh, statusLa
         </nav>
         <div style={S.sideFoot}>
           <div style={S.pill}>
-            <span
-              style={{
-                ...S.dot,
-                background: scanning ? "#e6c07b" : statusLabel === "IN TRADE" ? "#f07178" : "#3dd68c",
-              }}
-            />
+            <span style={{ ...S.dot, background: scanning ? "#e6c07b" : statusLabel === "IN TRADE" ? "#f07178" : "#3dd68c" }} />
             {scanning ? "SCANNING" : statusLabel || "STANDBY"}
           </div>
-          <button type="button" style={S.btnGhost} onClick={onRefresh}>
-            Refresh data
-          </button>
+          <button type="button" style={S.btnGhost} onClick={onRefresh}>Refresh data</button>
           <button type="button" style={S.btnPrimary} onClick={onScan} disabled={scanning}>
             {scanning ? "Scanning…" : "Run scan now"}
           </button>
         </div>
       </aside>
 
-      <div className="desk-main" style={{ ...S.main, ...(wide ? {} : { paddingTop: 64 }) }}>
+      <div
+        className="desk-main"
+        style={{
+          ...S.main,
+          ...(wide
+            ? {}
+            : {
+                paddingTop: 72,
+                paddingLeft: 12,
+                paddingRight: 12,
+                paddingBottom: 100,
+              }),
+        }}
+      >
         {children}
       </div>
     </div>
@@ -137,40 +134,44 @@ const S = {
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 30,
+    zIndex: 40,
     height: 56,
     display: "flex",
     alignItems: "center",
     gap: 10,
     padding: "0 12px",
-    background: "#0a0e14",
+    paddingTop: "env(safe-area-inset-top)",
+    background: "rgba(10,14,20,0.96)",
     borderBottom: "1px solid #1a2332",
+    backdropFilter: "blur(8px)",
   },
   iconBtn: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     borderRadius: 10,
     border: "1px solid #243044",
     background: "#121820",
     color: "#e8eef5",
     fontSize: 18,
     cursor: "pointer",
+    flexShrink: 0,
   },
   scanBtnSm: {
     background: "#1a7f4b",
     color: "#fff",
     border: "none",
     borderRadius: 8,
-    padding: "8px 12px",
+    padding: "10px 14px",
     fontWeight: 700,
     fontSize: 13,
     cursor: "pointer",
+    flexShrink: 0,
   },
   backdrop: {
     position: "fixed",
     inset: 0,
     background: "rgba(0,0,0,0.55)",
-    zIndex: 35,
+    zIndex: 45,
   },
   sidebar: {
     width: 240,

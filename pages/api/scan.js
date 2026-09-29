@@ -44,7 +44,7 @@ export default async function handler(req, res) {
 
     const seen = await getSeenKeys();
     const deriv = new DerivClient();
-    await deriv.connect();
+    // PAT flow: resolve OTP session URL first, then connect (do not hit classic WS)
     await deriv.authorize();
     await logEvent({
       stage: "auth",

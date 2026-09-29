@@ -256,24 +256,27 @@ export default function ChartPage() {
 
   return (
     <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          gap: 12,
-          flexWrap: "wrap",
-          marginBottom: 12,
-          alignItems: "flex-start",
-        }}
-      >
-        <div style={{ minWidth: 0 }}>
-          <h1 style={{ margin: 0, fontSize: 22 }}>Chart</h1>
-          <p style={{ margin: "6px 0 0", opacity: 0.55, fontSize: 13 }}>
-            {SYMBOLS.find((s) => s.symbol === symbol)?.name || symbol}
-            {lastClose != null ? ` · ${lastClose}` : ""}
-          </p>
+      <div style={{ marginBottom: 10 }}>
+        <h1 style={{ margin: 0, fontSize: 20 }}>Chart</h1>
+        <p style={{ margin: "4px 0 0", opacity: 0.55, fontSize: 13 }}>
+          {SYMBOLS.find((s) => s.symbol === symbol)?.name || symbol}
+          {lastClose != null ? ` · ${lastClose}` : ""}
+        </p>
+      </div>
+      {err && <div style={{ color: "#f07178", marginBottom: 8 }}>{err}</div>}
+
+      {/* Timeframe — full width, always visible */}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, opacity: 0.55, marginBottom: 6, textTransform: "uppercase" }}>
+          Timeframe
         </div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, 1fr)",
+            gap: 6,
+          }}
+        >
           {TFS.map((t) => (
             <button
               key={t}
@@ -282,12 +285,13 @@ export default function ChartPage() {
               style={{
                 background: tf === t ? "#1a7f4b" : "#121820",
                 color: "#fff",
-                border: "1px solid #243044",
-                borderRadius: 6,
-                padding: "6px 10px",
+                border: "1px solid " + (tf === t ? "#2d9d62" : "#243044"),
+                borderRadius: 8,
+                padding: "10px 4px",
                 cursor: "pointer",
-                fontSize: 11,
-                fontWeight: 600,
+                fontSize: 12,
+                fontWeight: 700,
+                minHeight: 40,
               }}
             >
               {t.toUpperCase()}
@@ -295,41 +299,44 @@ export default function ChartPage() {
           ))}
         </div>
       </div>
-      {err && <div style={{ color: "#f07178", marginBottom: 8 }}>{err}</div>}
 
       {/* Symbol chips — horizontal scroll on mobile */}
-      <div
-        className="symbol-chips"
-        style={{
-          display: "flex",
-          gap: 8,
-          overflowX: "auto",
-          WebkitOverflowScrolling: "touch",
-          paddingBottom: 10,
-          marginBottom: 10,
-        }}
-      >
-        {SYMBOLS.map((s) => (
-          <button
-            key={s.symbol}
-            type="button"
-            onClick={() => setSymbol(s.symbol)}
-            style={{
-              flex: "0 0 auto",
-              background: symbol === s.symbol ? "#1a7f4b" : "#121820",
-              color: "#e8eef5",
-              border: "1px solid " + (symbol === s.symbol ? "#2d9d62" : "#243044"),
-              borderRadius: 999,
-              padding: "8px 12px",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-              whiteSpace: "nowrap",
-            }}
-          >
-            {s.name}
-          </button>
-        ))}
+      <div style={{ marginBottom: 10 }}>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.8, opacity: 0.55, marginBottom: 6, textTransform: "uppercase" }}>
+          Symbol
+        </div>
+        <div
+          className="symbol-chips"
+          style={{
+            display: "flex",
+            gap: 8,
+            overflowX: "auto",
+            WebkitOverflowScrolling: "touch",
+            paddingBottom: 6,
+          }}
+        >
+          {SYMBOLS.map((s) => (
+            <button
+              key={s.symbol}
+              type="button"
+              onClick={() => setSymbol(s.symbol)}
+              style={{
+                flex: "0 0 auto",
+                background: symbol === s.symbol ? "#1a7f4b" : "#121820",
+                color: "#e8eef5",
+                border: "1px solid " + (symbol === s.symbol ? "#2d9d62" : "#243044"),
+                borderRadius: 999,
+                padding: "8px 12px",
+                cursor: "pointer",
+                fontSize: 12,
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+              }}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div

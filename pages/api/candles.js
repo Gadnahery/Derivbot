@@ -17,24 +17,37 @@ export default async function handler(req, res) {
   const gran = TF_MAP[tf] || 900;
   const count = Math.min(300, Number(req.query.count) || 150);
 
+  let deriv;
   try {
-    const deriv = new DerivClient();
+    deriv = new DerivClient();
     await deriv.authorize();
     const candles = await deriv.fetchCandles(symbol, gran, count);
-    deriv.close();
+    if (!candles || !candles.length) {
+      return res.status(200).json({
+        ok: false,
+        error: `No candles returned for ${symbol} (${tf}). Symbol may be closed or unavailable.`,
+        symbol,
+        tf,
+        candles: [],
+      });
+    }
     return res.status(200).json({
       ok: true,
       symbol,
       tf,
       candles: candles.map((c) => ({
-        time: c.epoch,
-        open: c.open,
-        high: c.high,
-        low: c.low,
-        close: c.close,
+        time: Number(c.epoch),
+        open: Number(c.open),
+        high: Number(c.high),
+        low: Number(c.low),
+        close: Number(c.close),
       })),
     });
   } catch (err) {
-    return res.status(500).json({ ok: false, error: err.message });
+    return res.status(500).json({ ok: false, error: err.message, symbol, tf });
+  } finally {
+    try {
+      if (deriv) deriv.close();
+    } catch {}
   }
 }

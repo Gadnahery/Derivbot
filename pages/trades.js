@@ -28,7 +28,7 @@ export default function TradesPage() {
         </div>
       )}
 
-      <div style={{ background: "#0d1117", border: "1px solid #1a2332", borderRadius: 12, overflow: "hidden" }}>
+      <div className="desk-table-wrap" style={{ background: "#0d1117", border: "1px solid #1a2332", borderRadius: 12, overflow: "hidden" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr style={{ textAlign: "left", background: "#111820" }}>

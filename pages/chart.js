@@ -52,7 +52,7 @@ export default function ChartPage() {
         rightPriceScale: { borderColor: "#1e2a3a" },
         timeScale: { borderColor: "#1e2a3a", timeVisible: true },
         width: chartRef.current.clientWidth,
-        height: 480,
+        height: typeof window !== 'undefined' && window.innerWidth < 900 ? 320 : 480,
       });
       const series = chart.addCandlestickSeries({
         upColor: "#3dd68c",
@@ -66,7 +66,8 @@ export default function ChartPage() {
       seriesApi.current = series;
       const onResize = () => {
         if (chartRef.current && chartApi.current) {
-          chartApi.current.applyOptions({ width: chartRef.current.clientWidth });
+          const h = window.innerWidth < 900 ? Math.max(280, Math.min(360, window.innerHeight * 0.42)) : 480;
+          chartApi.current.applyOptions({ width: chartRef.current.clientWidth, height: h });
         }
       };
       window.addEventListener("resize", onResize);
@@ -137,8 +138,8 @@ export default function ChartPage() {
       </div>
       {err && <div style={{ color: "#f07178", marginBottom: 8 }}>{err}</div>}
 
-      <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 12 }}>
-        <div style={{ background: "#0d1117", border: "1px solid #1a2332", borderRadius: 12, padding: 10 }}>
+      <div className="desk-grid-2">
+        <div className="chart-symbols" style={{ background: "#0d1117", border: "1px solid #1a2332", borderRadius: 12, padding: 10, maxHeight: 280, overflowY: "auto" }}>
           {SYMBOLS.map((s) => (
             <button
               key={s.symbol}
@@ -172,7 +173,7 @@ export default function ChartPage() {
           )}
           {loading && <div style={{ fontSize: 12, opacity: 0.5 }}>Loading candles…</div>}
           {chartErr && <div style={{ fontSize: 12, color: "#f07178" }}>Chart: {chartErr}</div>}
-          <div ref={chartRef} style={{ width: "100%", height: 480 }} />
+          <div ref={chartRef} style={{ width: "100%", height: "min(480px, 55vh)", minHeight: 280 }} />
         </div>
       </div>
     </Layout>

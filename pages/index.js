@@ -22,7 +22,7 @@ export default function Overview() {
       </p>
       {err && <div style={ERR}>{err}</div>}
 
-      <div style={cards}>
+      <div className="desk-cards" style={cards}>
         <Card title="Account status" value={statusLabel} sub={data?.at ? `Synced ${fmtTime(data.at)}` : "—"} />
         <Card
           title="Open PnL"
@@ -117,7 +117,7 @@ function Card({ title, value, sub, color }) {
 const H = { margin: "0 0 6px", fontSize: 22 };
 const P = { margin: "0 0 16px", opacity: 0.55, fontSize: 13, maxWidth: 640 };
 const ERR = { background: "#2a1215", border: "1px solid #5a2028", color: "#f07178", padding: 12, borderRadius: 10, marginBottom: 12 };
-const cards = { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 10, marginBottom: 14 };
+const cards = { display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 10, marginBottom: 14 };
 const card = { background: "#0d1117", border: "1px solid #1a2332", borderRadius: 12, padding: 14 };
 const panel = { background: "#0d1117", border: "1px solid #1a2332", borderRadius: 12, padding: 16 };
 const title = { fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", opacity: 0.6, marginBottom: 10 };

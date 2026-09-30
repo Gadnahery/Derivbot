@@ -9,7 +9,11 @@ const {
   computePnl,
   getSeenKeys,
   hasTradeKey,
+  saveSignal,
+  markSignalNotified,
+  getClient,
 } = require("../../lib/supabase");
+const { sendPushToAll, buildSignalPayload } = require("../../lib/push");
 
 export const config = {
   maxDuration: 60,
@@ -154,6 +158,64 @@ export default async function handler(req, res) {
             message: `${setup.side.toUpperCase()} entry=${setup.entry} rr=${setup.rr.toFixed(2)}`,
             payload: setup,
           });
+
+          // Build human criteria for MT5 signal (Skills 1–10 summary)
+          const criteria = {
+            system: "SMC/ICT Skills 1-10",
+            pairs: "XAUUSD · EURUSD · GBPUSD · GBPJPY · BTCUSD",
+            chain: info.chain === "gold" ? "4H→1H→5m OB→3m body→1m (XAU)" : "4H→1H→15m OB→5m body→1m (FX/BTC)",
+            steps: (log || []).map((l) => ({
+              stage: l.stage,
+              status: l.status,
+              tf: l.tf,
+              msg: l.msg,
+            })),
+            rules: {
+              bos: "4H body close BOS only (Skill 1)",
+              dominance: "Skill 8 pullback vs reversal via untested liquidity",
+              sweeps: "1st liquidation = bait; 2nd shallower = zone (Skill 10)",
+              bodyClose: "C1 wick fail + C2 body takeover (Skill 9)",
+              minRr: "TP at next pool, minimum 3R (Skill 6)",
+            },
+            mt5: {
+              symbol: info.mt5 || info.name,
+              side: setup.side,
+              entry: setup.entry,
+              sl: setup.sl,
+              tp: setup.tp,
+              lotHint: "0.01 micro per plan",
+            },
+          };
+
+          const signalRow = await saveSignal({
+            ...setup,
+            symbolName: info.name,
+            mt5: info.mt5 || info.name,
+            bias: bias || setup.bias,
+            criteria,
+            status: "new",
+            notified: false,
+          });
+
+          try {
+            const sb = getClient();
+            const payload = buildSignalPayload(setup, info, criteria);
+            const pushResult = await sendPushToAll(sb, payload);
+            if (signalRow?.id) await markSignalNotified(signalRow.id);
+            await logEvent({
+              stage: "signal",
+              status: "ok",
+              symbol: info.symbol,
+              message: `Signal saved + push sent=${pushResult.sent} fail=${pushResult.failed} · MT5 ${info.mt5 || info.name} ${setup.side} ${Number(setup.rr).toFixed(1)}R`,
+            });
+          } catch (pushErr) {
+            await logEvent({
+              stage: "signal",
+              status: "fail",
+              symbol: info.symbol,
+              message: `Signal saved but push failed: ${pushErr.message}`,
+            });
+          }
 
           // Hard guarantee: one trade per setup key
           const existing = await hasTradeKey(key);

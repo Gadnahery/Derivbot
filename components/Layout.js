@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 const NAV = [
   { href: "/", label: "Overview", tip: "Status & live PnL" },
+  { href: "/signals", label: "Signals", tip: "MT5 alerts & criteria" },
   { href: "/chart", label: "Chart", tip: "Candles & levels" },
   { href: "/pipeline", label: "Strategy", tip: "What the bot is doing" },
   { href: "/trades", label: "Trades", tip: "History & results" },

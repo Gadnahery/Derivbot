@@ -47,23 +47,26 @@ export default function PipelinePage() {
       by[s.id] = { status: "wait", message: "Not evaluated for this pair on the latest scan." };
     }
 
-    // ONLY this symbol's scans — newest first. Never fall back to another pair.
+    // ONLY this symbol — newest first. Never use another pair. Never resurrect old setups.
     const scansForSym = (data?.scans || [])
       .filter((x) => x.symbol === symbol)
       .sort((a, b) => new Date(b.at) - new Date(a.at));
 
-    // Prefer a scan that matches current mode if mode is stored on setup
+    // Latest scan only (within reason). Mode preference only among the last ~3 scans.
+    const recent = scansForSym.slice(0, 3);
     let scan = scansForSym[0] || null;
-    if (scalpMode) {
-      const scalpScan = scansForSym.find(
-        (s) => s.setup?.mode === "SCALP" || (s.log || []).some((l) => /SCALP/i.test(l.msg || l.message || ""))
-      );
-      if (scalpScan) scan = scalpScan;
-    } else {
-      const stdScan = scansForSym.find(
-        (s) => s.setup?.mode === "STANDARD" || (s.log || []).some((l) => /STANDARD/i.test(l.msg || l.message || ""))
-      );
-      if (stdScan) scan = stdScan;
+    if (scan && recent.length) {
+      if (scalpMode) {
+        const m = recent.find((s) =>
+          s.setup?.mode === "SCALP" || (s.log || []).some((l) => /SCALP/i.test(String(l.msg || l.message || "")))
+        );
+        if (m) scan = m;
+      } else {
+        const m = recent.find((s) =>
+          s.setup?.mode === "STANDARD" || (s.log || []).some((l) => /STANDARD/i.test(String(l.msg || l.message || "")))
+        );
+        if (m) scan = m;
+      }
     }
 
     if (scan?.log && Array.isArray(scan.log)) {
@@ -75,18 +78,34 @@ export default function PipelinePage() {
       }
     }
 
-    // Journal lines ONLY for this symbol (no global overwrite)
-    for (const j of (data?.journal || []).filter((x) => x.symbol === symbol).slice(0, 80)) {
+    // Journal ONLY for this symbol
+    for (const j of (data?.journal || []).filter((x) => x.symbol === symbol).slice(0, 40)) {
       if (j.stage && by[j.stage]) {
         by[j.stage] = { status: j.status || "ok", message: j.message || "" };
       }
     }
 
-    // Setup only if it belongs to this symbol
-    const setup =
-      scan?.setup && scan.symbol === symbol
-        ? scan.setup
-        : (data?.scans || []).find((x) => x.symbol === symbol && x.setup)?.setup || null;
+    // Active setup = ONLY on the chosen latest scan. No fallback to hours-old setups.
+    let setup = scan?.setup && scan.symbol === symbol ? scan.setup : null;
+
+    // Drop if setup is older than 15 minutes (already played out)
+    if (setup && scan?.at) {
+      const ageMin = (Date.now() - new Date(scan.at).getTime()) / 60000;
+      if (ageMin > 15) setup = null;
+    }
+
+    // Drop if we already have a closed trade for same symbol+side+entry (passed trade)
+    if (setup) {
+      const trades = data?.trades || [];
+      const matched = trades.find((tr) => {
+        if (tr.symbol !== symbol) return false;
+        if (tr.side && setup.side && tr.side !== setup.side) return false;
+        const sameEntry = tr.entry != null && setup.entry != null && Math.abs(Number(tr.entry) - Number(setup.entry)) < Math.abs(Number(setup.entry)) * 0.0002;
+        const done = ["won", "lost", "paper"].includes(tr.status);
+        return sameEntry && done;
+      });
+      if (matched) setup = null;
+    }
 
     return { by, scan, setup };
   }, [data, symbol, scalpMode, STEPS]);

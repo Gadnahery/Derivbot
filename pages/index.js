@@ -5,7 +5,18 @@ export default function Overview() {
   const { data, err, scanning, load, runScan, scalpMode, toggleScalp } = useDesk();
   const open = data?.openTrade;
   const stats = data?.stats;
-  const setups = (data?.scans || []).filter((s) => s.setup || s.has_setup).slice(0, 6);
+  const setups = (data?.scans || [])
+    .filter((s) => {
+      if (!s.setup && !s.has_setup) return false;
+      if (!s.at) return false;
+      const ageMin = (Date.now() - new Date(s.at).getTime()) / 60000;
+      return ageMin <= 15; // only fresh setups
+    })
+    .filter((s, i, arr) => {
+      // one row per symbol — keep newest only
+      return arr.findIndex((x) => x.symbol === s.symbol) === i;
+    })
+    .slice(0, 6);
   const statusLabel = open ? "IN TRADE" : "STANDBY";
 
   // Best R:R among recent setups so it doesn't "disappear"

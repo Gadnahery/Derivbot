@@ -12,7 +12,7 @@ export default async function handler(req, res) {
   try {
     const [journal, scans, trades, open, openTrades, stats, signals] = await Promise.all([
       getRecentJournal(100),
-      getRecentScans(50),
+      getRecentScans(100),
       getRecentTrades(100),
       getOpenTrade(),
       getOpenTrades(),

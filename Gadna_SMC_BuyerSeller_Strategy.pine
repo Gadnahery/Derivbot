@@ -1,0 +1,438 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © Gadna System — Skills 1–10 buyer/seller logic for TradingView backtest
+//@version=5
+strategy(
+     title              = "Gadna SMC Buyer/Seller (Skills 1-10)",
+     shorttitle         = "GadnaSMC",
+     overlay            = true,
+     pyramiding         = 0,
+     initial_capital    = 10000,
+     default_qty_type   = strategy.fixed,
+     default_qty_value  = 0.01,          // minimal lot
+     commission_type    = strategy.commission.percent,
+     commission_value   = 0.02,
+     slippage           = 1,
+     calc_on_every_tick = false,
+     process_orders_on_close = true,
+     max_bars_back      = 5000
+)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INPUTS
+// ═══════════════════════════════════════════════════════════════════════════
+grpMode   = "Mode & chain"
+modeIn    = input.string("Standard", "Mode", options=["Standard", "Scalp"], group=grpMode,
+     tooltip="Standard = full Skill 4 chain. Scalp = faster frames, Skill 5 first-liq allowed.")
+assetType = input.string("Auto", "Asset type", options=["Auto", "Gold", "Forex/BTC"], group=grpMode,
+     tooltip="Gold uses 5m/3m OB chain. Forex/BTC uses 15m/5m. Auto detects XAU/GOLD.")
+
+grpTf     = "Timeframes (override Auto)"
+useCustom = input.bool(false, "Use custom TFs below", group=grpTf)
+tfBias    = input.timeframe("240", "Bias TF (Skill 1)", group=grpTf)
+tfOB      = input.timeframe("15",  "Real OB TF (Skill 2)", group=grpTf)
+tfSweep   = input.timeframe("15",  "Sweep TF (Skill 10)", group=grpTf)
+tfBody    = input.timeframe("5",   "Body confirm TF (Skill 9)", group=grpTf)
+
+grpRisk   = "Risk / Skill 6"
+minRR     = input.float(3.0, "Minimum R:R", minval=1.0, step=0.5, group=grpRisk)
+minScore  = input.int(50, "Minimum score (0-100)", minval=0, maxval=100, group=grpRisk)
+lotSize   = input.float(0.01, "Lot size (minimal)", minval=0.01, step=0.01, group=grpRisk)
+slBufferAtr = input.float(0.08, "SL buffer × ATR", minval=0.01, step=0.01, group=grpRisk)
+maxSlAtr  = input.float(2.5, "Max SL distance × ATR (skip if wider)", minval=0.5, group=grpRisk)
+minSlAtr  = input.float(0.15, "Min SL distance × ATR (skip if tighter)", minval=0.05, group=grpRisk)
+
+grpSkill  = "Skill filters"
+useSkill8 = input.bool(true, "Skill 8 dominance filter", group=grpSkill)
+require2nd= input.bool(true, "Require 2nd shallower sweep (Standard)", group=grpSkill,
+     tooltip="Scalp can use first-liquidation path when this is on but Mode=Scalp.")
+minBodyPct= input.float(28.0, "Min C2 body % of range", minval=10.0, maxval=80.0, group=grpSkill) / 100.0
+swingLen  = input.int(3, "Swing left/right bars", minval=1, maxval=10, group=grpSkill)
+bosLook   = input.int(80, "BOS lookback bars", minval=20, maxval=300, group=grpSkill)
+
+grpVis    = "Visuals"
+showOB    = input.bool(true, "Show order blocks", group=grpVis)
+showSweep = input.bool(true, "Show sweep markers", group=grpVis)
+showSig   = input.bool(true, "Show entry markers", group=grpVis)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RESOLVE CHAIN (Skill 4A / 4B)
+// ═══════════════════════════════════════════════════════════════════════════
+isGold =
+     assetType == "Gold" or
+     (assetType == "Auto" and (str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")))
+
+string rBias  = useCustom ? tfBias  : (modeIn == "Scalp" ? "60"  : "240")
+string rOB    = useCustom ? tfOB    : (modeIn == "Scalp" ? (isGold ? "3"  : "5")  : (isGold ? "5"  : "15"))
+string rSweep = useCustom ? tfSweep : (modeIn == "Scalp" ? (isGold ? "3"  : "5")  : (isGold ? "5"  : "15"))
+string rBody  = useCustom ? tfBody  : (modeIn == "Scalp" ? "1" : (isGold ? "3" : "5"))
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CANDLE PRIMITIVES (Skill 9 — buyers / sellers)
+// ═══════════════════════════════════════════════════════════════════════════
+bodyTop(o, c) => math.max(o, c)
+bodyBot(o, c) => math.min(o, c)
+isBull(o, c)  => c > o
+isBear(o, c)  => c < o
+rng(h, l)     => math.max(h - l, syminfo.mintick)
+bodySz(o, c)  => math.abs(c - o)
+bodyRatio(o, c, h, l) => bodySz(o, c) / rng(h, l)
+upperWick(o, c, h) => h - bodyTop(o, c)
+lowerWick(o, c, l) => bodyBot(o, c) - l
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HTF DATA
+// ═══════════════════════════════════════════════════════════════════════════
+bias_o = request.security(syminfo.tickerid, rBias, open,  barmerge.gaps_off, barmerge.lookahead_off)
+bias_h = request.security(syminfo.tickerid, rBias, high,  barmerge.gaps_off, barmerge.lookahead_off)
+bias_l = request.security(syminfo.tickerid, rBias, low,   barmerge.gaps_off, barmerge.lookahead_off)
+bias_c = request.security(syminfo.tickerid, rBias, close, barmerge.gaps_off, barmerge.lookahead_off)
+
+ob_o = request.security(syminfo.tickerid, rOB, open,  barmerge.gaps_off, barmerge.lookahead_off)
+ob_h = request.security(syminfo.tickerid, rOB, high,  barmerge.gaps_off, barmerge.lookahead_off)
+ob_l = request.security(syminfo.tickerid, rOB, low,   barmerge.gaps_off, barmerge.lookahead_off)
+ob_c = request.security(syminfo.tickerid, rOB, close, barmerge.gaps_off, barmerge.lookahead_off)
+
+sw_o = request.security(syminfo.tickerid, rSweep, open,  barmerge.gaps_off, barmerge.lookahead_off)
+sw_h = request.security(syminfo.tickerid, rSweep, high,  barmerge.gaps_off, barmerge.lookahead_off)
+sw_l = request.security(syminfo.tickerid, rSweep, low,   barmerge.gaps_off, barmerge.lookahead_off)
+sw_c = request.security(syminfo.tickerid, rSweep, close, barmerge.gaps_off, barmerge.lookahead_off)
+
+bd_o = request.security(syminfo.tickerid, rBody, open,  barmerge.gaps_off, barmerge.lookahead_off)
+bd_h = request.security(syminfo.tickerid, rBody, high,  barmerge.gaps_off, barmerge.lookahead_off)
+bd_l = request.security(syminfo.tickerid, rBody, low,   barmerge.gaps_off, barmerge.lookahead_off)
+bd_c = request.security(syminfo.tickerid, rBody, close, barmerge.gaps_off, barmerge.lookahead_off)
+
+// 1H for Skill 8
+h1_o = request.security(syminfo.tickerid, "60", open,  barmerge.gaps_off, barmerge.lookahead_off)
+h1_h = request.security(syminfo.tickerid, "60", high,  barmerge.gaps_off, barmerge.lookahead_off)
+h1_l = request.security(syminfo.tickerid, "60", low,   barmerge.gaps_off, barmerge.lookahead_off)
+h1_c = request.security(syminfo.tickerid, "60", close, barmerge.gaps_off, barmerge.lookahead_off)
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SKILL 1 — Body-close BOS only (who closed beyond prior swing)
+// ═══════════════════════════════════════════════════════════════════════════
+f_swingHigh(h, len) =>
+    float v = na
+    bool ok = true
+    for i = 1 to len
+        ok := ok and h[len] > h[len - i] and h[len] > h[len + i]
+    ok ? h[len] : na
+
+f_swingLow(l, len) =>
+    float v = na
+    bool ok = true
+    for i = 1 to len
+        ok := ok and l[len] < l[len - i] and l[len] < l[len + i]
+    ok ? l[len] : na
+
+// Confirmed swing highs/lows on bias TF series (use bias_*)
+var float lastSwH = na
+var float lastSwL = na
+var int   lastSwHBar = na
+var int   lastSwLBar = na
+
+biasSH = ta.pivothigh(bias_h, swingLen, swingLen)
+biasSL = ta.pivotlow(bias_l, swingLen, swingLen)
+if not na(biasSH)
+    lastSwH := biasSH
+    lastSwHBar := bar_index - swingLen
+if not na(biasSL)
+    lastSwL := biasSL
+    lastSwLBar := bar_index - swingLen
+
+// Body-close BOS: close beyond swing, not just wick
+bullBOS = not na(lastSwH) and isBull(bias_o, bias_c) and bias_c > lastSwH and bias_o <= lastSwH
+bearBOS = not na(lastSwL) and isBear(bias_o, bias_c) and bias_c < lastSwL and bias_o >= lastSwL
+
+var int biasDir = 0  // 1 bull, -1 bear, 0 none
+if bullBOS
+    biasDir := 1
+if bearBOS
+    biasDir := -1
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SKILL 8 — Dominance: opposing BOS without untested liquidity = skip
+// ═══════════════════════════════════════════════════════════════════════════
+var float lastH1SwH = na
+var float lastH1SwL = na
+h1SH = ta.pivothigh(h1_h, swingLen, swingLen)
+h1SL = ta.pivotlow(h1_l, swingLen, swingLen)
+if not na(h1SH)
+    lastH1SwH := h1SH
+if not na(h1SL)
+    lastH1SwL := h1SL
+
+h1BullBOS = not na(lastH1SwH) and isBull(h1_o, h1_c) and h1_c > lastH1SwH
+h1BearBOS = not na(lastH1SwL) and isBear(h1_o, h1_c) and h1_c < lastH1SwL
+
+// Untested liquidity: recent swing not traded through
+untestedBuyLiq  = not na(lastH1SwL) and h1_l > lastH1SwL   // sell-side liq still below
+untestedSellLiq = not na(lastH1SwH) and h1_h < lastH1SwH   // buy-side liq still above
+
+skill8Ok = true
+if useSkill8 and biasDir == 1
+    // bull bias: opposing = bearish BOS on 1H
+    if h1BearBOS and not untestedBuyLiq
+        skill8Ok := false
+if useSkill8 and biasDir == -1
+    if h1BullBOS and not untestedSellLiq
+        skill8Ok := false
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SKILL 2 — Order Block = last opposing candle before body-close BOS impulse
+// ═══════════════════════════════════════════════════════════════════════════
+var float obTop = na
+var float obBot = na
+var int   obBias = 0
+var int   obBar = na
+
+// Detect OB-TF body-close BOS and mark last opposing candle
+var float obLastSwH = na
+var float obLastSwL = na
+obSH = ta.pivothigh(ob_h, swingLen, swingLen)
+obSL = ta.pivotlow(ob_l, swingLen, swingLen)
+if not na(obSH)
+    obLastSwH := obSH
+if not na(obSL)
+    obLastSwL := obSL
+
+obBullBOS = not na(obLastSwH) and isBull(ob_o, ob_c) and ob_c > obLastSwH
+obBearBOS = not na(obLastSwL) and isBear(ob_o, ob_c) and ob_c < obLastSwL
+
+// On BOS, OB is prior opposing candle (simplified: previous bar if opposite color)
+if obBullBOS and biasDir == 1
+    // last bearish candle before this close
+    if isBear(ob_o[1], ob_c[1])
+        obTop := bodyTop(ob_o[1], ob_c[1])
+        obBot := bodyBot(ob_o[1], ob_c[1])
+        obBias := 1
+        obBar := bar_index
+    else if isBear(ob_o[2], ob_c[2])
+        obTop := bodyTop(ob_o[2], ob_c[2])
+        obBot := bodyBot(ob_o[2], ob_c[2])
+        obBias := 1
+        obBar := bar_index
+
+if obBearBOS and biasDir == -1
+    if isBull(ob_o[1], ob_c[1])
+        obTop := bodyTop(ob_o[1], ob_c[1])
+        obBot := bodyBot(ob_o[1], ob_c[1])
+        obBias := -1
+        obBar := bar_index
+    else if isBull(ob_o[2], ob_c[2])
+        obTop := bodyTop(ob_o[2], ob_c[2])
+        obBot := bodyBot(ob_o[2], ob_c[2])
+        obBias := -1
+        obBar := bar_index
+
+// Skill 3 — consumed if wick already tagged zone after mark
+obConsumed = not na(obTop) and not na(obBot) and bar_index > obBar and ta.barssince(low <= obTop and high >= obBot) > 0 and (low <= obTop and high >= obBot)
+
+// Near zone?
+atrOb = ta.atr(14)
+pad = atrOb * (modeIn == "Scalp" ? 0.9 : 0.4)
+nearOB = not na(obTop) and not na(obBot) and low <= obTop + pad and high >= obBot - pad
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SKILL 10 — Liquidity sweeps at zone
+// Bear bias: buy-side grab = wick above zone, body closes back below
+// Bull bias: sell-side grab = wick below zone, body closes back above
+// ═══════════════════════════════════════════════════════════════════════════
+zoneLevel = biasDir == -1 ? obTop : obBot
+
+sweepBullishFail = not na(zoneLevel) and sw_h > zoneLevel and sw_c < zoneLevel and isBear(sw_o, sw_c)  // for sell bias
+sweepBearishFail = not na(zoneLevel) and sw_l < zoneLevel and sw_c > zoneLevel and isBull(sw_o, sw_c)  // for buy bias
+
+var float sweep1Ext = na
+var float sweep2Ext = na
+var int   sweep1Bar = na
+var int   sweep2Bar = na
+var int   sweepBias = 0
+
+if biasDir == -1 and sweepBullishFail
+    if na(sweep1Ext) or sweepBias != -1
+        sweep1Ext := sw_h
+        sweep1Bar := bar_index
+        sweep2Ext := na
+        sweep2Bar := na
+        sweepBias := -1
+    else if not na(sweep1Ext) and sw_h < sweep1Ext  // shallower 2nd
+        sweep2Ext := sw_h
+        sweep2Bar := bar_index
+
+if biasDir == 1 and sweepBearishFail
+    if na(sweep1Ext) or sweepBias != 1
+        sweep1Ext := sw_l
+        sweep1Bar := bar_index
+        sweep2Ext := na
+        sweep2Bar := na
+        sweepBias := 1
+    else if not na(sweep1Ext) and sw_l > sweep1Ext  // shallower 2nd
+        sweep2Ext := sw_l
+        sweep2Bar := bar_index
+
+// Reset sweeps if bias flips
+if biasDir != sweepBias and biasDir != 0
+    sweep1Ext := na
+    sweep2Ext := na
+    sweep1Bar := na
+    sweep2Bar := na
+
+hasSweep1 = not na(sweep1Ext)
+hasSweep2 = not na(sweep2Ext)
+// Scalp / Skill 5: first liquidation path
+allowFirstLiq = modeIn == "Scalp" or not require2nd
+sweepReady = hasSweep1 and (hasSweep2 or allowFirstLiq)
+activeSweepExt = hasSweep2 ? sweep2Ext : sweep1Ext
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SKILL 9 — Body-close C1 + C2 at level
+// C1: wick through level, body closes back
+// C2: body takeover in bias direction, real body
+// ═══════════════════════════════════════════════════════════════════════════
+level = not na(activeSweepExt) ? activeSweepExt : zoneLevel
+
+// C1 on body TF
+c1Sell = not na(level) and bd_h > level and bd_c < level and isBear(bd_o, bd_c)  // wick above, close below
+c1Buy  = not na(level) and bd_l < level and bd_c > level and isBull(bd_o, bd_c)
+
+// C2 = current bar takeover after C1 on prior bar
+c2Sell = c1Sell[1] and isBear(bd_o, bd_c) and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct and bd_c < bd_c[1]
+c2Buy  = c1Buy[1]  and isBull(bd_o, bd_c) and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct and bd_c > bd_c[1]
+
+// Instant overrun refinement
+overrunSell = isBear(bd_o, bd_c) and bd_c < bd_o[1] and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct
+overrunBuy  = isBull(bd_o, bd_c) and bd_c > bd_o[1] and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct
+
+bodyConfirmSell = (c2Sell or (c1Sell[1] and overrunSell)) and biasDir == -1
+bodyConfirmBuy  = (c2Buy  or (c1Buy[1]  and overrunBuy))  and biasDir == 1
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TP = next opposing swing liquidity (Skill 6 — no invented targets)
+// ═══════════════════════════════════════════════════════════════════════════
+float tpBuy  = na
+float tpSell = na
+// Use recent pivot on chart TF as proxy for next pool
+ph = ta.pivothigh(high, 5, 5)
+pl = ta.pivotlow(low, 5, 5)
+var float lastPh = na
+var float lastPl = na
+if not na(ph)
+    lastPh := ph
+if not na(pl)
+    lastPl := pl
+
+// For buys TP is next buy-side liquidity above (prior high); sells next low
+tpBuy  := lastPh
+tpSell := lastPl
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ENTRY / EXIT
+// ═══════════════════════════════════════════════════════════════════════════
+atrChart = ta.atr(14)
+buffer = atrChart * slBufferAtr
+
+longSL  = (not na(activeSweepExt) ? activeSweepExt : low) - buffer
+shortSL = (not na(activeSweepExt) ? activeSweepExt : high) + buffer
+
+longRisk  = close - longSL
+shortRisk = shortSL - close
+
+longTP  = not na(tpBuy)  and tpBuy  > close ? tpBuy  : close + longRisk  * minRR
+shortTP = not na(tpSell) and tpSell < close ? tpSell : close - shortRisk * minRR
+
+// Prefer natural pool; enforce min RR
+longRR  = longRisk  > 0 ? (longTP - close) / longRisk  : 0.0
+shortRR = shortRisk > 0 ? (close - shortTP) / shortRisk : 0.0
+
+// SL band filter
+longSlOk  = longRisk  >= atrChart * minSlAtr and longRisk  <= atrChart * maxSlAtr
+shortSlOk = shortRisk >= atrChart * minSlAtr and shortRisk <= atrChart * maxSlAtr
+
+// Score (simplified nurse)
+scoreLong = 0
+scoreLong += biasDir == 1 ? 20 : 0
+scoreLong += skill8Ok ? 10 : 0
+scoreLong += nearOB ? 10 : 0
+scoreLong += hasSweep1 ? 10 : 0
+scoreLong += hasSweep2 ? 15 : (allowFirstLiq and hasSweep1 ? 8 : 0)
+scoreLong += bodyConfirmBuy ? 20 : 0
+scoreLong += longRR >= minRR ? 15 : 0
+scoreLong += not obConsumed ? 5 : 0
+
+scoreShort = 0
+scoreShort += biasDir == -1 ? 20 : 0
+scoreShort += skill8Ok ? 10 : 0
+scoreShort += nearOB ? 10 : 0
+scoreShort += hasSweep1 ? 10 : 0
+scoreShort += hasSweep2 ? 15 : (allowFirstLiq and hasSweep1 ? 8 : 0)
+scoreShort += bodyConfirmSell ? 20 : 0
+scoreShort += shortRR >= minRR ? 15 : 0
+scoreShort += not obConsumed ? 5 : 0
+
+longCond =
+     biasDir == 1 and skill8Ok and nearOB and sweepReady and bodyConfirmBuy and
+     longRR >= minRR and longSlOk and scoreLong >= minScore and strategy.position_size == 0
+
+shortCond =
+     biasDir == -1 and skill8Ok and nearOB and sweepReady and bodyConfirmSell and
+     shortRR >= minRR and shortSlOk and scoreShort >= minScore and strategy.position_size == 0
+
+if longCond
+    strategy.entry("Buy", strategy.long, qty=lotSize)
+    strategy.exit("Buy Exit", "Buy", stop=longSL, limit=longTP)
+
+if shortCond
+    strategy.entry("Sell", strategy.short, qty=lotSize)
+    strategy.exit("Sell Exit", "Sell", stop=shortSL, limit=shortTP)
+
+// Cancel stale limits if bias flips
+if biasDir == -1 and strategy.position_size > 0
+    strategy.close("Buy", comment="Bias flip")
+if biasDir == 1 and strategy.position_size < 0
+    strategy.close("Sell", comment="Bias flip")
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VISUALS
+// ═══════════════════════════════════════════════════════════════════════════
+bgcolor(biasDir == 1 ? color.new(color.green, 94) : biasDir == -1 ? color.new(color.red, 94) : na, title="Bias")
+
+plotshape(showSig and longCond,  title="Buy",  style=shape.triangleup,   location=location.belowbar, color=color.new(color.lime, 0), size=size.small, text="BUY")
+plotshape(showSig and shortCond, title="Sell", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0),  size=size.small, text="SELL")
+
+plotshape(showSweep and hasSweep1 and bar_index == sweep1Bar, title="Sweep1", style=shape.xcross, location=location.abovebar, color=color.orange, size=size.tiny, text="S1")
+plotshape(showSweep and hasSweep2 and bar_index == sweep2Bar, title="Sweep2", style=shape.xcross, location=location.abovebar, color=color.yellow, size=size.tiny, text="S2")
+
+// OB boxes (simplified lines)
+plot(showOB and not na(obTop) ? obTop : na, "OB Top", color=color.new(color.teal, 30), style=plot.style_linebr, linewidth=1)
+plot(showOB and not na(obBot) ? obBot : na, "OB Bot", color=color.new(color.teal, 30), style=plot.style_linebr, linewidth=1)
+
+// Dashboard
+var table dash = table.new(position.top_right, 2, 12, bgcolor=color.new(color.black, 70), border_width=1)
+if barstate.islast
+    table.cell(dash, 0, 0, "Gadna SMC", text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 0, modeIn, text_color=color.aqua, text_size=size.small)
+    table.cell(dash, 0, 1, "Bias", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 1, biasDir == 1 ? "BUYERS" : biasDir == -1 ? "SELLERS" : "—", text_color=biasDir == 1 ? color.lime : biasDir == -1 ? color.red : color.gray, text_size=size.small)
+    table.cell(dash, 0, 2, "Skill8", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 2, skill8Ok ? "OK" : "BLOCK", text_color=skill8Ok ? color.lime : color.red, text_size=size.small)
+    table.cell(dash, 0, 3, "Near OB", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 3, nearOB ? "YES" : "no", text_color=nearOB ? color.lime : color.gray, text_size=size.small)
+    table.cell(dash, 0, 4, "Sweep1/2", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 4, (hasSweep1 ? "1" : "-") + "/" + (hasSweep2 ? "2" : "-"), text_color=color.orange, text_size=size.small)
+    table.cell(dash, 0, 5, "Body C2", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 5, bodyConfirmBuy or bodyConfirmSell ? "YES" : "wait", text_color=bodyConfirmBuy or bodyConfirmSell ? color.lime : color.gray, text_size=size.small)
+    table.cell(dash, 0, 6, "Score L/S", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 6, str.tostring(scoreLong) + "/" + str.tostring(scoreShort), text_color=color.white, text_size=size.small)
+    table.cell(dash, 0, 7, "Min RR", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 7, str.tostring(minRR), text_color=color.white, text_size=size.small)
+    table.cell(dash, 0, 8, "Lot", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 8, str.tostring(lotSize), text_color=color.white, text_size=size.small)
+    table.cell(dash, 0, 9, "Chain", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 9, rBias + "→" + rOB + "→" + rBody, text_color=color.aqua, text_size=size.tiny)
+    table.cell(dash, 0, 10, "Asset", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 10, isGold ? "Gold" : "FX/BTC", text_color=color.white, text_size=size.small)
+
+// Alerts
+alertcondition(longCond,  title="Gadna Buy",  message="Gadna BUY body-close confirmed — check SL/TP on chart")
+alertcondition(shortCond, title="Gadna Sell", message="Gadna SELL body-close confirmed — check SL/TP on chart")

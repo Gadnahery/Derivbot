@@ -12,7 +12,7 @@ const NAV = [
   { href: "/stats", label: "Performance", tip: "Win rate & totals" },
 ];
 
-export default function Layout({ children, scanning, onScan, onRefresh, statusLabel }) {
+export default function Layout({ children, scanning, onScan, onRefresh, statusLabel, scalpMode, onToggleScalp }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [wide, setWide] = useState(true);
@@ -95,6 +95,19 @@ export default function Layout({ children, scanning, onScan, onRefresh, statusLa
             <span style={{ ...S.dot, background: scanning ? "#e6c07b" : statusLabel === "IN TRADE" ? "#f07178" : "#3dd68c" }} />
             {scanning ? "SCANNING" : statusLabel || "STANDBY"}
           </div>
+          {typeof onToggleScalp === "function" && (
+            <button
+              type="button"
+              onClick={onToggleScalp}
+              style={{
+                ...S.btnGhost,
+                borderColor: scalpMode ? "#2962ff" : "#243044",
+                background: scalpMode ? "#1a2744" : "#121820",
+              }}
+            >
+              {scalpMode ? "Scalp mode ON" : "Scalp mode OFF"}
+            </button>
+          )}
           <button type="button" style={S.btnGhost} onClick={onRefresh}>Refresh data</button>
           <button type="button" style={S.btnPrimary} onClick={onScan} disabled={scanning}>
             {scanning ? "Scanning…" : "Run scan now"}

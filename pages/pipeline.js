@@ -15,7 +15,7 @@ const STEPS = [
 ];
 
 export default function PipelinePage() {
-  const { data, err, scanning, load, runScan } = useDesk();
+  const { data, err, scanning, load, runScan, scalpMode, toggleScalp } = useDesk();
   const [symbol, setSymbol] = useState("frxEURUSD");
   const open = data?.openTrade;
   const statusLabel = open ? "IN TRADE" : "STANDBY";
@@ -42,7 +42,7 @@ export default function PipelinePage() {
   const setup = state.scan?.setup;
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp}>
       <h1 style={{ margin: "0 0 6px", fontSize: 22 }}>Strategy progress</h1>
       <p style={{ margin: "0 0 16px", opacity: 0.55, fontSize: 13, maxWidth: 720 }}>
         This is the exact checklist the bot runs top-to-bottom. A trade is only taken when every required step is OK

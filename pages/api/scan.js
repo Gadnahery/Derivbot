@@ -32,6 +32,7 @@ export default async function handler(req, res) {
     }
   }
 
+  const mode = String(req.query.mode || req.body?.mode || "standard").toLowerCase() === "scalp" ? "scalp" : "standard";
   const started = Date.now();
   const results = [];
   let tradePlaced = null;
@@ -40,6 +41,12 @@ export default async function handler(req, res) {
   try {
     const deriv = new DerivClient();
     await deriv.authorize();
+    await logEvent({
+      stage: "mode",
+      status: "ok",
+      message: `Scan mode=${mode}`,
+    });
+
     await logEvent({
       stage: "auth",
       status: "ok",
@@ -119,7 +126,7 @@ export default async function handler(req, res) {
           message: `Scanning ${info.name}`,
         });
         const frames = await deriv.loadFrames(info.symbol);
-        const { setup, log, bias } = scanSymbol(info, frames);
+        const { setup, log, bias } = scanSymbol(info, frames, mode);
 
         for (const l of log) {
           await logEvent({

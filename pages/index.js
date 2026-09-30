@@ -2,7 +2,7 @@ import Layout from "../components/Layout";
 import { useDesk, fmtUsd, fmtTime, statusColor } from "../lib/useDesk";
 
 export default function Overview() {
-  const { data, err, scanning, load, runScan } = useDesk();
+  const { data, err, scanning, load, runScan, scalpMode, toggleScalp } = useDesk();
   const open = data?.openTrade;
   const stats = data?.stats;
   const setups = (data?.scans || []).filter((s) => s.setup || s.has_setup).slice(0, 6);
@@ -15,7 +15,7 @@ export default function Overview() {
     .sort((a, b) => Number(b.rr) - Number(a.rr))[0];
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp}>
       <h1 style={H}>Overview</h1>
       <p style={P}>
         The bot runs 24/7 via Supabase cron. This page is a live window — closing it does not stop trading.

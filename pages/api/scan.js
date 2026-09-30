@@ -1,5 +1,5 @@
 const { DerivClient } = require("../../lib/deriv");
-const { WATCHLIST, MIN_STAKE, scanSymbol } = require("../../lib/strategy");
+const { WATCHLIST, MIN_STAKE, MIN_SCORE, scanSymbol } = require("../../lib/strategy");
 const {
   logEvent,
   saveScanResult,

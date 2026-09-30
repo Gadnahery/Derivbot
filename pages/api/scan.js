@@ -163,7 +163,7 @@ export default async function handler(req, res) {
           }
 
           const validSetup =
-            setup && (setup.score == null || setup.score >= (MIN_SCORE || 68));
+            setup && (setup.score == null || setup.score >= (MIN_SCORE || 50));
 
           await saveScanResult({
             symbol: info.symbol,

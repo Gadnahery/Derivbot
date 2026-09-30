@@ -15,7 +15,7 @@ function stepsFor(scalpMode, chain) {
       { id: "body1", label: "7. Rejection candle (C1)", why: "Wick through the level, body closes back — attempt failed." },
       { id: "body2", label: "8. Confirmation (C2 · 1m)", why: "Next candle body closes beyond C1 — entry trigger on 1m." },
       { id: "rr", label: "9. Minimum 3R", why: "Distance to next liquidity pool must pay at least 3× risk." },
-      { id: "score", label: "10. Selectivity score", why: "Score must clear the nurse threshold (≥68) or we skip." },
+      { id: "score", label: "10. Selectivity score", why: "Score must clear the nurse threshold (≥50) or we skip." },
     ];
   }
   return [
@@ -28,7 +28,7 @@ function stepsFor(scalpMode, chain) {
     { id: "body1", label: "7. Rejection candle (C1)", why: "Wick through the level, body closes back — attempt failed." },
     { id: "body2", label: "8. Confirmation (C2)", why: "Next candle body closes beyond C1 — proof the other side took control. Entry trigger." },
     { id: "rr", label: "9. Minimum 3R", why: "Distance to next liquidity pool must pay at least 3× risk. Otherwise skip." },
-    { id: "score", label: "10. Selectivity score", why: "Score must clear the nurse threshold (≥68) or we skip." },
+    { id: "score", label: "10. Selectivity score", why: "Score must clear the nurse threshold (≥50) or we skip." },
   ];
 }
 

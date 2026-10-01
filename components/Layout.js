@@ -12,7 +12,7 @@ const NAV = [
   { href: "/stats", label: "Performance", tip: "Win rate & totals" },
 ];
 
-export default function Layout({ children, scanning, onScan, onRefresh, statusLabel, scalpMode, onToggleScalp }) {
+export default function Layout({ children, scanning, onScan, onRefresh, statusLabel, scalpMode, onToggleScalp, accountMode, onSetAccount }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [wide, setWide] = useState(true);

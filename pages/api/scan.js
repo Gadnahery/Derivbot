@@ -12,6 +12,7 @@ const {
   saveSignal,
   markSignalNotified,
   getClient,
+  getSetting,
 } = require("../../lib/supabase");
 const { sendPushToAll, buildSignalPayload } = require("../../lib/push");
 
@@ -38,19 +39,23 @@ export default async function handler(req, res) {
   let openManaged = null;
 
   try {
-    const deriv = new DerivClient();
+    const qMode = String(req.query.account || (req.body && req.body.account) || "").toLowerCase();
+    const stored = await getSetting("accountMode", "demo");
+    const accountMode = qMode === "live" || qMode === "demo" ? qMode : (stored === "live" ? "live" : "demo");
+
+    const deriv = new DerivClient({ accountMode });
     await deriv.authorize();
 
     await logEvent({
       stage: "mode",
       status: "ok",
-      message: `Rise/Fall synthetics · maxOpen=${MAX_OPEN}`,
+      message: `Rise/Fall scalp · account=${accountMode} (${deriv.isDemo ? "DEMO" : "LIVE"}) · maxOpen=${MAX_OPEN} · stake=0.35`,
     });
 
     await logEvent({
       stage: "auth",
       status: "ok",
-      message: `Authorized ${deriv.loginid} balance=${deriv.balance} ${deriv.currency}`,
+      message: `Authorized ${deriv.loginid} balance=${deriv.balance} ${deriv.currency} · ${deriv.isDemo ? "DEMO" : "LIVE"}`,
     });
 
     // Manage ALL open trades
@@ -276,7 +281,7 @@ export default async function handler(req, res) {
               stage: "fill",
               status: "ok",
               symbol: info.symbol,
-              message: `LIVE FILL ${bought.contractId} ${mode} · ${setup.side} ${Number(setup.rr).toFixed(1)}R`,
+              message: `LIVE FILL ${bought.contractId} ${bought.contract_type || setup.side} ${setup.duration}${setup.durationUnit} stake=${setup.stake || 0.35} · ${accountMode}`,
             });
           } catch (err) {
             tradePlaced = await saveTrade({

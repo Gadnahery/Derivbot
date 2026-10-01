@@ -33,7 +33,7 @@ function stepsFor(scalpMode, chain) {
 }
 
 export default function PipelinePage() {
-  const { data, err, scanning, load, runScan, scalpMode, toggleScalp } = useDesk();
+  const { data, err, scanning, load, runScan, scalpMode, toggleScalp, accountMode, setAccount } = useDesk();
   const [symbol, setSymbol] = useState("frxEURUSD");
   const open = data?.openTrade;
   const openTrades = data?.openTrades || (open ? [open] : []);
@@ -119,7 +119,7 @@ export default function PipelinePage() {
       onRefresh={load}
       statusLabel={statusLabel}
       scalpMode={scalpMode}
-      onToggleScalp={toggleScalp}
+      onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount}
     >
       <h1 style={{ margin: "0 0 6px", fontSize: 22 }}>Strategy pipeline</h1>
       <p style={{ margin: "0 0 12px", opacity: 0.55, fontSize: 13, maxWidth: 720 }}>

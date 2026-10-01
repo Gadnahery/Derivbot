@@ -3,7 +3,7 @@ import { useDesk, fmtTime, statusColor } from "../lib/useDesk";
 import { useEffect, useState } from "react";
 
 export default function SignalsPage() {
-  const { data, err, scanning, load, runScan, scalpMode, toggleScalp } = useDesk();
+  const { data, err, scanning, load, runScan, scalpMode, toggleScalp, accountMode, setAccount } = useDesk();
   const open = data?.openTrade;
   const statusLabel = open ? "IN TRADE" : "STANDBY";
   const signals = data?.signals || [];
@@ -63,7 +63,7 @@ export default function SignalsPage() {
   }
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount}>
       <h1 style={{ margin: "0 0 6px", fontSize: 22 }}>MT5 Signals</h1>
       <p style={{ margin: "0 0 14px", opacity: 0.55, fontSize: 13, maxWidth: 720 }}>
         Currency + gold + BTC only (no Deriv synthetics). When a full setup passes Skills 1–10 and ≥3R,

@@ -3,7 +3,7 @@ import { useDesk, fmtUsd } from "../lib/useDesk";
 import { useMemo } from "react";
 
 export default function StatsPage() {
-  const { data, err, scanning, load, runScan, scalpMode, toggleScalp } = useDesk();
+  const { data, err, scanning, load, runScan, scalpMode, toggleScalp, accountMode, setAccount } = useDesk();
   const open = data?.openTrade;
   const statusLabel = open ? "IN TRADE" : "STANDBY";
   const stats = data?.stats;
@@ -24,7 +24,7 @@ export default function StatsPage() {
   }, [trades]);
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount}>
       <h1 style={{ margin: "0 0 6px", fontSize: 22 }}>Performance</h1>
       <p style={{ margin: "0 0 16px", opacity: 0.55, fontSize: 13 }}>
         Aggregates from stored trades. Review tomorrow before changing any strategy filters.

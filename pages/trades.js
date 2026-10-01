@@ -2,13 +2,13 @@ import Layout from "../components/Layout";
 import { useDesk, fmtUsd, fmtTime, statusColor } from "../lib/useDesk";
 
 export default function TradesPage() {
-  const { data, err, scanning, load, runScan, scalpMode, toggleScalp } = useDesk();
+  const { data, err, scanning, load, runScan, scalpMode, toggleScalp, accountMode, setAccount } = useDesk();
   const open = data?.openTrade;
   const trades = data?.trades || [];
   const statusLabel = open ? "IN TRADE" : "STANDBY";
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount}>
       <h1 style={{ margin: "0 0 6px", fontSize: 22 }}>Trades</h1>
       <p style={{ margin: "0 0 16px", opacity: 0.55, fontSize: 13 }}>
         Every fill is stored in Supabase (entry, stop, target, planned R:R, realized PnL). Use this tomorrow to optimize.

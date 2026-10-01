@@ -34,13 +34,13 @@ function human(entry) {
 }
 
 export default function JournalPage() {
-  const { data, err, scanning, load, runScan, scalpMode, toggleScalp } = useDesk();
+  const { data, err, scanning, load, runScan, scalpMode, toggleScalp, accountMode, setAccount } = useDesk();
   const open = data?.openTrade;
   const statusLabel = open ? "IN TRADE" : "STANDBY";
   const journal = data?.journal || [];
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount}>
       <h1 style={{ margin: "0 0 6px", fontSize: 22 }}>Activity</h1>
       <p style={{ margin: "0 0 16px", opacity: 0.55, fontSize: 13, maxWidth: 720 }}>
         Plain-language feed. “Reading this symbol” means the bot is checking structure — not that it entered a trade.

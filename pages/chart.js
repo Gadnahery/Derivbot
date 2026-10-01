@@ -24,7 +24,7 @@ function pricePrecision(sample) {
 }
 
 export default function ChartPage() {
-  const { data, err, scanning, load, runScan, scalpMode, toggleScalp } = useDesk();
+  const { data, err, scanning, load, runScan, scalpMode, toggleScalp, accountMode, setAccount } = useDesk();
   const [symbol, setSymbol] = useState("R_100");
   const [tf, setTf] = useState("m15");
   const [candles, setCandles] = useState([]);
@@ -423,7 +423,7 @@ export default function ChartPage() {
       : null;
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount}>
       {/* TV-style top legend */}
       <div style={S.legendBar}>
         <div style={{ minWidth: 0 }}>

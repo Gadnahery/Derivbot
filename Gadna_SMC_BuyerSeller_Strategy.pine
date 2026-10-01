@@ -1,136 +1,91 @@
-// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © Gadna System — Skills 1–10 buyer/seller logic (Pine v6)
+// Gadna SMC Buyer/Seller Skills 1-10 — Pine v6
 //@version=6
-strategy(
-     title                   = "Gadna SMC Buyer/Seller (Skills 1-10)",
-     shorttitle              = "GadnaSMC",
-     overlay                 = true,
-     pyramiding              = 0,
-     initial_capital         = 10000,
-     default_qty_type        = strategy.fixed,
-     default_qty_value       = 0.01,
-     commission_type         = strategy.commission.percent,
-     commission_value        = 0.02,
-     slippage                = 1,
-     calc_on_every_tick      = false,
-     process_orders_on_close = true,
-     max_bars_back           = 5000)
+strategy("Gadna SMC Buyer/Seller", "GadnaSMC", true, 0, 10000, default_qty_type=strategy.fixed, default_qty_value=0.01, commission_type=strategy.commission.percent, commission_value=0.02, slippage=1, calc_on_every_tick=false, process_orders_on_close=true, max_bars_back=5000)
 
-// ═══════════════════════════════════════════════════════════════════════════
-// INPUTS
-// ═══════════════════════════════════════════════════════════════════════════
-string grpMode = "Mode & chain"
-string modeIn = input.string("Standard", "Mode", options = ["Standard", "Scalp"], group = grpMode,
-     tooltip = "Standard = full Skill 4 chain. Scalp = faster frames, Skill 5 first-liq allowed.")
-string assetType = input.string("Auto", "Asset type", options = ["Auto", "Gold", "Forex/BTC"], group = grpMode,
-     tooltip = "Gold uses 5m/3m OB chain. Forex/BTC uses 15m/5m. Auto detects XAU/GOLD.")
+// —— Inputs ——
+grpMode = "Mode & chain"
+modeIn = input.string("Standard", "Mode", options=["Standard", "Scalp"], group=grpMode)
+assetType = input.string("Auto", "Asset type", options=["Auto", "Gold", "Forex/BTC"], group=grpMode)
 
-string grpTf = "Timeframes (override Auto)"
-bool useCustom = input.bool(false, "Use custom TFs below", group = grpTf)
-string tfBias = input.timeframe("240", "Bias TF (Skill 1)", group = grpTf)
-string tfOB = input.timeframe("15", "Real OB TF (Skill 2)", group = grpTf)
-string tfSweep = input.timeframe("15", "Sweep TF (Skill 10)", group = grpTf)
-string tfBody = input.timeframe("5", "Body confirm TF (Skill 9)", group = grpTf)
+grpTf = "Timeframes (override Auto)"
+useCustom = input.bool(false, "Use custom TFs below", group=grpTf)
+tfBias = input.timeframe("240", "Bias TF (Skill 1)", group=grpTf)
+tfOB = input.timeframe("15", "Real OB TF (Skill 2)", group=grpTf)
+tfSweep = input.timeframe("15", "Sweep TF (Skill 10)", group=grpTf)
+tfBody = input.timeframe("5", "Body confirm TF (Skill 9)", group=grpTf)
 
-string grpRisk = "Risk / Skill 6"
-float minRR = input.float(3.0, "Minimum R:R", minval = 1.0, step = 0.5, group = grpRisk)
-int minScore = input.int(50, "Minimum score (0-100)", minval = 0, maxval = 100, group = grpRisk)
-float lotSize = input.float(0.01, "Lot size (minimal)", minval = 0.01, step = 0.01, group = grpRisk)
-float slBufferAtr = input.float(0.08, "SL buffer × ATR", minval = 0.01, step = 0.01, group = grpRisk)
-float maxSlAtr = input.float(2.5, "Max SL distance × ATR (skip if wider)", minval = 0.5, group = grpRisk)
-float minSlAtr = input.float(0.15, "Min SL distance × ATR (skip if tighter)", minval = 0.05, group = grpRisk)
+grpRisk = "Risk / Skill 6"
+minRR = input.float(3.0, "Minimum R:R", minval=1.0, step=0.5, group=grpRisk)
+minScore = input.int(50, "Minimum score (0-100)", minval=0, maxval=100, group=grpRisk)
+lotSize = input.float(0.01, "Lot size (minimal)", minval=0.01, step=0.01, group=grpRisk)
+slBufferAtr = input.float(0.08, "SL buffer x ATR", minval=0.01, step=0.01, group=grpRisk)
+maxSlAtr = input.float(2.5, "Max SL distance x ATR", minval=0.5, group=grpRisk)
+minSlAtr = input.float(0.15, "Min SL distance x ATR", minval=0.05, group=grpRisk)
 
-string grpSkill = "Skill filters"
-bool useSkill8 = input.bool(true, "Skill 8 dominance filter", group = grpSkill)
-bool require2nd = input.bool(true, "Require 2nd shallower sweep (Standard)", group = grpSkill,
-     tooltip = "Scalp can use first-liquidation path when Mode = Scalp.")
-float minBodyPct = input.float(28.0, "Min C2 body % of range", minval = 10.0, maxval = 80.0, group = grpSkill) / 100.0
-int swingLen = input.int(3, "Swing left/right bars", minval = 1, maxval = 10, group = grpSkill)
+grpSkill = "Skill filters"
+useSkill8 = input.bool(true, "Skill 8 dominance filter", group=grpSkill)
+require2nd = input.bool(true, "Require 2nd shallower sweep (Standard)", group=grpSkill)
+minBodyPct = input.float(28.0, "Min C2 body % of range", minval=10.0, maxval=80.0, group=grpSkill) / 100.0
+swingLen = input.int(3, "Swing left/right bars", minval=1, maxval=10, group=grpSkill)
 
-string grpVis = "Visuals"
-bool showOB = input.bool(true, "Show order blocks", group = grpVis)
-bool showSweep = input.bool(true, "Show sweep markers", group = grpVis)
-bool showSig = input.bool(true, "Show entry markers", group = grpVis)
+grpVis = "Visuals"
+showOB = input.bool(true, "Show order blocks", group=grpVis)
+showSweep = input.bool(true, "Show sweep markers", group=grpVis)
+showSig = input.bool(true, "Show entry markers", group=grpVis)
 
-// ═══════════════════════════════════════════════════════════════════════════
-// RESOLVE CHAIN (Skill 4A / 4B)
-// ═══════════════════════════════════════════════════════════════════════════
-bool isGold =
-     assetType == "Gold" or
-     (assetType == "Auto" and (str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")))
+// —— Chain (Skill 4A / 4B) ——
+isGold = assetType == "Gold" or (assetType == "Auto" and (str.contains(syminfo.ticker, "XAU") or str.contains(syminfo.ticker, "GOLD")))
+rBias = useCustom ? tfBias : (modeIn == "Scalp" ? "60" : "240")
+rOB = useCustom ? tfOB : (modeIn == "Scalp" ? (isGold ? "3" : "5") : (isGold ? "5" : "15"))
+rSweep = useCustom ? tfSweep : (modeIn == "Scalp" ? (isGold ? "3" : "5") : (isGold ? "5" : "15"))
+rBody = useCustom ? tfBody : (modeIn == "Scalp" ? "1" : (isGold ? "3" : "5"))
 
-string rBias = useCustom ? tfBias : (modeIn == "Scalp" ? "60" : "240")
-string rOB = useCustom ? tfOB : (modeIn == "Scalp" ? (isGold ? "3" : "5") : (isGold ? "5" : "15"))
-string rSweep = useCustom ? tfSweep : (modeIn == "Scalp" ? (isGold ? "3" : "5") : (isGold ? "5" : "15"))
-string rBody = useCustom ? tfBody : (modeIn == "Scalp" ? "1" : (isGold ? "3" : "5"))
+// —— Candle helpers (Skill 9) ——
+bodyTop(o, c) => math.max(o, c)
+bodyBot(o, c) => math.min(o, c)
+isBull(o, c) => c > o
+isBear(o, c) => c < o
+rng(h, l) => math.max(h - l, syminfo.mintick)
+bodyRatio(o, c, h, l) => math.abs(c - o) / rng(h, l)
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CANDLE PRIMITIVES (Skill 9 — buyers / sellers)
-// ═══════════════════════════════════════════════════════════════════════════
-bodyTop(float o, float c) =>
-    math.max(o, c)
+// —— HTF data ——
+bias_o = request.security(syminfo.tickerid, rBias, open, barmerge.gaps_off, barmerge.lookahead_off)
+bias_h = request.security(syminfo.tickerid, rBias, high, barmerge.gaps_off, barmerge.lookahead_off)
+bias_l = request.security(syminfo.tickerid, rBias, low, barmerge.gaps_off, barmerge.lookahead_off)
+bias_c = request.security(syminfo.tickerid, rBias, close, barmerge.gaps_off, barmerge.lookahead_off)
 
-bodyBot(float o, float c) =>
-    math.min(o, c)
+ob_o = request.security(syminfo.tickerid, rOB, open, barmerge.gaps_off, barmerge.lookahead_off)
+ob_h = request.security(syminfo.tickerid, rOB, high, barmerge.gaps_off, barmerge.lookahead_off)
+ob_l = request.security(syminfo.tickerid, rOB, low, barmerge.gaps_off, barmerge.lookahead_off)
+ob_c = request.security(syminfo.tickerid, rOB, close, barmerge.gaps_off, barmerge.lookahead_off)
 
-isBull(float o, float c) =>
-    c > o
+sw_o = request.security(syminfo.tickerid, rSweep, open, barmerge.gaps_off, barmerge.lookahead_off)
+sw_h = request.security(syminfo.tickerid, rSweep, high, barmerge.gaps_off, barmerge.lookahead_off)
+sw_l = request.security(syminfo.tickerid, rSweep, low, barmerge.gaps_off, barmerge.lookahead_off)
+sw_c = request.security(syminfo.tickerid, rSweep, close, barmerge.gaps_off, barmerge.lookahead_off)
 
-isBear(float o, float c) =>
-    c < o
+bd_o = request.security(syminfo.tickerid, rBody, open, barmerge.gaps_off, barmerge.lookahead_off)
+bd_h = request.security(syminfo.tickerid, rBody, high, barmerge.gaps_off, barmerge.lookahead_off)
+bd_l = request.security(syminfo.tickerid, rBody, low, barmerge.gaps_off, barmerge.lookahead_off)
+bd_c = request.security(syminfo.tickerid, rBody, close, barmerge.gaps_off, barmerge.lookahead_off)
 
-rng(float h, float l) =>
-    math.max(h - l, syminfo.mintick)
+h1_o = request.security(syminfo.tickerid, "60", open, barmerge.gaps_off, barmerge.lookahead_off)
+h1_h = request.security(syminfo.tickerid, "60", high, barmerge.gaps_off, barmerge.lookahead_off)
+h1_l = request.security(syminfo.tickerid, "60", low, barmerge.gaps_off, barmerge.lookahead_off)
+h1_c = request.security(syminfo.tickerid, "60", close, barmerge.gaps_off, barmerge.lookahead_off)
 
-bodySz(float o, float c) =>
-    math.abs(c - o)
-
-bodyRatio(float o, float c, float h, float l) =>
-    bodySz(o, c) / rng(h, l)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// HTF DATA (lookahead_off — no repaint)
-// ═══════════════════════════════════════════════════════════════════════════
-float bias_o = request.security(syminfo.tickerid, rBias, open, barmerge.gaps_off, barmerge.lookahead_off)
-float bias_h = request.security(syminfo.tickerid, rBias, high, barmerge.gaps_off, barmerge.lookahead_off)
-float bias_l = request.security(syminfo.tickerid, rBias, low, barmerge.gaps_off, barmerge.lookahead_off)
-float bias_c = request.security(syminfo.tickerid, rBias, close, barmerge.gaps_off, barmerge.lookahead_off)
-
-float ob_o = request.security(syminfo.tickerid, rOB, open, barmerge.gaps_off, barmerge.lookahead_off)
-float ob_h = request.security(syminfo.tickerid, rOB, high, barmerge.gaps_off, barmerge.lookahead_off)
-float ob_l = request.security(syminfo.tickerid, rOB, low, barmerge.gaps_off, barmerge.lookahead_off)
-float ob_c = request.security(syminfo.tickerid, rOB, close, barmerge.gaps_off, barmerge.lookahead_off)
-
-float sw_o = request.security(syminfo.tickerid, rSweep, open, barmerge.gaps_off, barmerge.lookahead_off)
-float sw_h = request.security(syminfo.tickerid, rSweep, high, barmerge.gaps_off, barmerge.lookahead_off)
-float sw_l = request.security(syminfo.tickerid, rSweep, low, barmerge.gaps_off, barmerge.lookahead_off)
-float sw_c = request.security(syminfo.tickerid, rSweep, close, barmerge.gaps_off, barmerge.lookahead_off)
-
-float bd_o = request.security(syminfo.tickerid, rBody, open, barmerge.gaps_off, barmerge.lookahead_off)
-float bd_h = request.security(syminfo.tickerid, rBody, high, barmerge.gaps_off, barmerge.lookahead_off)
-float bd_l = request.security(syminfo.tickerid, rBody, low, barmerge.gaps_off, barmerge.lookahead_off)
-float bd_c = request.security(syminfo.tickerid, rBody, close, barmerge.gaps_off, barmerge.lookahead_off)
-
-float h1_o = request.security(syminfo.tickerid, "60", open, barmerge.gaps_off, barmerge.lookahead_off)
-float h1_h = request.security(syminfo.tickerid, "60", high, barmerge.gaps_off, barmerge.lookahead_off)
-float h1_l = request.security(syminfo.tickerid, "60", low, barmerge.gaps_off, barmerge.lookahead_off)
-float h1_c = request.security(syminfo.tickerid, "60", close, barmerge.gaps_off, barmerge.lookahead_off)
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SKILL 1 — Body-close BOS only
-// ═══════════════════════════════════════════════════════════════════════════
+// —— Skill 1: body-close BOS ——
 var float lastSwH = na
 var float lastSwL = na
-
-float biasSH = ta.pivothigh(bias_h, swingLen, swingLen)
-float biasSL = ta.pivotlow(bias_l, swingLen, swingLen)
+biasSH = ta.pivothigh(bias_h, swingLen, swingLen)
+biasSL = ta.pivotlow(bias_l, swingLen, swingLen)
 if not na(biasSH)
     lastSwH := biasSH
 if not na(biasSL)
     lastSwL := biasSL
 
-bool bullBOS = not na(lastSwH) and isBull(bias_o, bias_c) and bias_c > lastSwH and bias_o <= lastSwH
-bool bearBOS = not na(lastSwL) and isBear(bias_o, bias_c) and bias_c < lastSwL and bias_o >= lastSwL
+bullBOS = not na(lastSwH) and isBull(bias_o, bias_c) and bias_c > lastSwH and bias_o <= lastSwH
+bearBOS = not na(lastSwL) and isBear(bias_o, bias_c) and bias_c < lastSwL and bias_o >= lastSwL
 
 var int biasDir = 0
 if bullBOS
@@ -138,90 +93,72 @@ if bullBOS
 if bearBOS
     biasDir := -1
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SKILL 8 — Dominance filter
-// ═══════════════════════════════════════════════════════════════════════════
+// —— Skill 8 ——
 var float lastH1SwH = na
 var float lastH1SwL = na
-float h1SH = ta.pivothigh(h1_h, swingLen, swingLen)
-float h1SL = ta.pivotlow(h1_l, swingLen, swingLen)
+h1SH = ta.pivothigh(h1_h, swingLen, swingLen)
+h1SL = ta.pivotlow(h1_l, swingLen, swingLen)
 if not na(h1SH)
     lastH1SwH := h1SH
 if not na(h1SL)
     lastH1SwL := h1SL
 
-bool h1BullBOS = not na(lastH1SwH) and isBull(h1_o, h1_c) and h1_c > lastH1SwH
-bool h1BearBOS = not na(lastH1SwL) and isBear(h1_o, h1_c) and h1_c < lastH1SwL
+h1BullBOS = not na(lastH1SwH) and isBull(h1_o, h1_c) and h1_c > lastH1SwH
+h1BearBOS = not na(lastH1SwL) and isBear(h1_o, h1_c) and h1_c < lastH1SwL
+untestedBuyLiq = not na(lastH1SwL) and h1_l > lastH1SwL
+untestedSellLiq = not na(lastH1SwH) and h1_h < lastH1SwH
 
-bool untestedBuyLiq = not na(lastH1SwL) and h1_l > lastH1SwL
-bool untestedSellLiq = not na(lastH1SwH) and h1_h < lastH1SwH
+skill8Ok = true
+if useSkill8 and biasDir == 1 and h1BearBOS and not untestedBuyLiq
+    skill8Ok := false
+if useSkill8 and biasDir == -1 and h1BullBOS and not untestedSellLiq
+    skill8Ok := false
 
-bool skill8Ok = true
-if useSkill8 and biasDir == 1
-    if h1BearBOS and not untestedBuyLiq
-        skill8Ok := false
-if useSkill8 and biasDir == -1
-    if h1BullBOS and not untestedSellLiq
-        skill8Ok := false
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SKILL 2 — Order Block (last opposing candle before body-close BOS)
-// ═══════════════════════════════════════════════════════════════════════════
+// —— Skill 2: Order Block ——
 var float obTop = na
 var float obBot = na
-var int obBias = 0
 var int obBar = 0
-
 var float obLastSwH = na
 var float obLastSwL = na
-float obSH = ta.pivothigh(ob_h, swingLen, swingLen)
-float obSL = ta.pivotlow(ob_l, swingLen, swingLen)
+obSH = ta.pivothigh(ob_h, swingLen, swingLen)
+obSL = ta.pivotlow(ob_l, swingLen, swingLen)
 if not na(obSH)
     obLastSwH := obSH
 if not na(obSL)
     obLastSwL := obSL
 
-bool obBullBOS = not na(obLastSwH) and isBull(ob_o, ob_c) and ob_c > obLastSwH
-bool obBearBOS = not na(obLastSwL) and isBear(ob_o, ob_c) and ob_c < obLastSwL
+obBullBOS = not na(obLastSwH) and isBull(ob_o, ob_c) and ob_c > obLastSwH
+obBearBOS = not na(obLastSwL) and isBear(ob_o, ob_c) and ob_c < obLastSwL
 
 if obBullBOS and biasDir == 1
     if isBear(ob_o[1], ob_c[1])
         obTop := bodyTop(ob_o[1], ob_c[1])
         obBot := bodyBot(ob_o[1], ob_c[1])
-        obBias := 1
         obBar := bar_index
     else if isBear(ob_o[2], ob_c[2])
         obTop := bodyTop(ob_o[2], ob_c[2])
         obBot := bodyBot(ob_o[2], ob_c[2])
-        obBias := 1
         obBar := bar_index
 
 if obBearBOS and biasDir == -1
     if isBull(ob_o[1], ob_c[1])
         obTop := bodyTop(ob_o[1], ob_c[1])
         obBot := bodyBot(ob_o[1], ob_c[1])
-        obBias := -1
         obBar := bar_index
     else if isBull(ob_o[2], ob_c[2])
         obTop := bodyTop(ob_o[2], ob_c[2])
         obBot := bodyBot(ob_o[2], ob_c[2])
-        obBias := -1
         obBar := bar_index
 
-bool taggedNow = not na(obTop) and not na(obBot) and low <= obTop and high >= obBot
-bool obConsumed = not na(obTop) and bar_index > obBar and taggedNow
+obConsumed = not na(obTop) and bar_index > obBar and low <= obTop and high >= obBot
+atrOb = ta.atr(14)
+pad = atrOb * (modeIn == "Scalp" ? 0.9 : 0.4)
+nearOB = not na(obTop) and not na(obBot) and low <= obTop + pad and high >= obBot - pad
 
-float atrOb = ta.atr(14)
-float pad = atrOb * (modeIn == "Scalp" ? 0.9 : 0.4)
-bool nearOB = not na(obTop) and not na(obBot) and low <= obTop + pad and high >= obBot - pad
-
-// ═══════════════════════════════════════════════════════════════════════════
-// SKILL 10 — Liquidity sweeps
-// ═══════════════════════════════════════════════════════════════════════════
-float zoneLevel = biasDir == -1 ? obTop : obBot
-
-bool sweepBullishFail = not na(zoneLevel) and sw_h > zoneLevel and sw_c < zoneLevel and isBear(sw_o, sw_c)
-bool sweepBearishFail = not na(zoneLevel) and sw_l < zoneLevel and sw_c > zoneLevel and isBull(sw_o, sw_c)
+// —— Skill 10: sweeps ——
+zoneLevel = biasDir == -1 ? obTop : obBot
+sweepBullishFail = not na(zoneLevel) and sw_h > zoneLevel and sw_c < zoneLevel and isBear(sw_o, sw_c)
+sweepBearishFail = not na(zoneLevel) and sw_l < zoneLevel and sw_c > zoneLevel and isBull(sw_o, sw_c)
 
 var float sweep1Ext = na
 var float sweep2Ext = na
@@ -236,7 +173,7 @@ if biasDir == -1 and sweepBullishFail
         sweep2Ext := na
         sweep2Bar := na
         sweepBias := -1
-    else if not na(sweep1Ext) and sw_h < sweep1Ext
+    else if sw_h < sweep1Ext
         sweep2Ext := sw_h
         sweep2Bar := bar_index
 
@@ -247,7 +184,7 @@ if biasDir == 1 and sweepBearishFail
         sweep2Ext := na
         sweep2Bar := na
         sweepBias := 1
-    else if not na(sweep1Ext) and sw_l > sweep1Ext
+    else if sw_l > sweep1Ext
         sweep2Ext := sw_l
         sweep2Bar := bar_index
 
@@ -258,34 +195,26 @@ if biasDir != 0 and biasDir != sweepBias
     sweep2Bar := na
     sweepBias := 0
 
-bool hasSweep1 = not na(sweep1Ext)
-bool hasSweep2 = not na(sweep2Ext)
-bool allowFirstLiq = modeIn == "Scalp" or not require2nd
-bool sweepReady = hasSweep1 and (hasSweep2 or allowFirstLiq)
-float activeSweepExt = hasSweep2 ? sweep2Ext : sweep1Ext
+hasSweep1 = not na(sweep1Ext)
+hasSweep2 = not na(sweep2Ext)
+allowFirstLiq = modeIn == "Scalp" or not require2nd
+sweepReady = hasSweep1 and (hasSweep2 or allowFirstLiq)
+activeSweepExt = hasSweep2 ? sweep2Ext : sweep1Ext
 
-// ═══════════════════════════════════════════════════════════════════════════
-// SKILL 9 — Body-close C1 + C2
-// ═══════════════════════════════════════════════════════════════════════════
-float level = not na(activeSweepExt) ? activeSweepExt : zoneLevel
+// —— Skill 9: C1 + C2 body-close ——
+level = not na(activeSweepExt) ? activeSweepExt : zoneLevel
+c1Sell = not na(level) and bd_h > level and bd_c < level and isBear(bd_o, bd_c)
+c1Buy = not na(level) and bd_l < level and bd_c > level and isBull(bd_o, bd_c)
+c2Sell = c1Sell[1] and isBear(bd_o, bd_c) and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct and bd_c < bd_c[1]
+c2Buy = c1Buy[1] and isBull(bd_o, bd_c) and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct and bd_c > bd_c[1]
+overrunSell = isBear(bd_o, bd_c) and bd_c < bd_o[1] and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct
+overrunBuy = isBull(bd_o, bd_c) and bd_c > bd_o[1] and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct
+bodyConfirmSell = (c2Sell or (c1Sell[1] and overrunSell)) and biasDir == -1
+bodyConfirmBuy = (c2Buy or (c1Buy[1] and overrunBuy)) and biasDir == 1
 
-bool c1Sell = not na(level) and bd_h > level and bd_c < level and isBear(bd_o, bd_c)
-bool c1Buy = not na(level) and bd_l < level and bd_c > level and isBull(bd_o, bd_c)
-
-bool c2Sell = c1Sell[1] and isBear(bd_o, bd_c) and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct and bd_c < bd_c[1]
-bool c2Buy = c1Buy[1] and isBull(bd_o, bd_c) and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct and bd_c > bd_c[1]
-
-bool overrunSell = isBear(bd_o, bd_c) and bd_c < bd_o[1] and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct
-bool overrunBuy = isBull(bd_o, bd_c) and bd_c > bd_o[1] and bodyRatio(bd_o, bd_c, bd_h, bd_l) >= minBodyPct
-
-bool bodyConfirmSell = (c2Sell or (c1Sell[1] and overrunSell)) and biasDir == -1
-bool bodyConfirmBuy = (c2Buy or (c1Buy[1] and overrunBuy)) and biasDir == 1
-
-// ═══════════════════════════════════════════════════════════════════════════
-// TP / SL / SCORE
-// ═══════════════════════════════════════════════════════════════════════════
-float ph = ta.pivothigh(high, 5, 5)
-float pl = ta.pivotlow(low, 5, 5)
+// —— Risk / entries ——
+ph = ta.pivothigh(high, 5, 5)
+pl = ta.pivotlow(low, 5, 5)
 var float lastPh = na
 var float lastPl = na
 if not na(ph)
@@ -293,25 +222,20 @@ if not na(ph)
 if not na(pl)
     lastPl := pl
 
-float atrChart = ta.atr(14)
-float buffer = atrChart * slBufferAtr
+atrChart = ta.atr(14)
+buffer = atrChart * slBufferAtr
+longSL = (not na(activeSweepExt) ? activeSweepExt : low) - buffer
+shortSL = (not na(activeSweepExt) ? activeSweepExt : high) + buffer
+longRisk = close - longSL
+shortRisk = shortSL - close
+longTP = not na(lastPh) and lastPh > close ? lastPh : close + longRisk * minRR
+shortTP = not na(lastPl) and lastPl < close ? lastPl : close - shortRisk * minRR
+longRR = longRisk > 0 ? (longTP - close) / longRisk : 0.0
+shortRR = shortRisk > 0 ? (close - shortTP) / shortRisk : 0.0
+longSlOk = longRisk >= atrChart * minSlAtr and longRisk <= atrChart * maxSlAtr
+shortSlOk = shortRisk >= atrChart * minSlAtr and shortRisk <= atrChart * maxSlAtr
 
-float longSL = (not na(activeSweepExt) ? activeSweepExt : low) - buffer
-float shortSL = (not na(activeSweepExt) ? activeSweepExt : high) + buffer
-
-float longRisk = close - longSL
-float shortRisk = shortSL - close
-
-float longTP = not na(lastPh) and lastPh > close ? lastPh : close + longRisk * minRR
-float shortTP = not na(lastPl) and lastPl < close ? lastPl : close - shortRisk * minRR
-
-float longRR = longRisk > 0 ? (longTP - close) / longRisk : 0.0
-float shortRR = shortRisk > 0 ? (close - shortTP) / shortRisk : 0.0
-
-bool longSlOk = longRisk >= atrChart * minSlAtr and longRisk <= atrChart * maxSlAtr
-bool shortSlOk = shortRisk >= atrChart * minSlAtr and shortRisk <= atrChart * maxSlAtr
-
-int scoreLong = 0
+scoreLong = 0
 scoreLong += biasDir == 1 ? 20 : 0
 scoreLong += skill8Ok ? 10 : 0
 scoreLong += nearOB ? 10 : 0
@@ -321,7 +245,7 @@ scoreLong += bodyConfirmBuy ? 20 : 0
 scoreLong += longRR >= minRR ? 15 : 0
 scoreLong += not obConsumed ? 5 : 0
 
-int scoreShort = 0
+scoreShort = 0
 scoreShort += biasDir == -1 ? 20 : 0
 scoreShort += skill8Ok ? 10 : 0
 scoreShort += nearOB ? 10 : 0
@@ -331,63 +255,51 @@ scoreShort += bodyConfirmSell ? 20 : 0
 scoreShort += shortRR >= minRR ? 15 : 0
 scoreShort += not obConsumed ? 5 : 0
 
-bool longCond =
-     biasDir == 1 and skill8Ok and nearOB and sweepReady and bodyConfirmBuy and
-     longRR >= minRR and longSlOk and scoreLong >= minScore and strategy.position_size == 0
-
-bool shortCond =
-     biasDir == -1 and skill8Ok and nearOB and sweepReady and bodyConfirmSell and
-     shortRR >= minRR and shortSlOk and scoreShort >= minScore and strategy.position_size == 0
+longCond = biasDir == 1 and skill8Ok and nearOB and sweepReady and bodyConfirmBuy and longRR >= minRR and longSlOk and scoreLong >= minScore and strategy.position_size == 0
+shortCond = biasDir == -1 and skill8Ok and nearOB and sweepReady and bodyConfirmSell and shortRR >= minRR and shortSlOk and scoreShort >= minScore and strategy.position_size == 0
 
 if longCond
-    strategy.entry("Buy", strategy.long, qty = lotSize)
-    strategy.exit("Buy Exit", from_entry = "Buy", stop = longSL, limit = longTP)
+    strategy.entry("Buy", strategy.long, qty=lotSize)
+    strategy.exit("Buy Exit", from_entry="Buy", stop=longSL, limit=longTP)
 
 if shortCond
-    strategy.entry("Sell", strategy.short, qty = lotSize)
-    strategy.exit("Sell Exit", from_entry = "Sell", stop = shortSL, limit = shortTP)
+    strategy.entry("Sell", strategy.short, qty=lotSize)
+    strategy.exit("Sell Exit", from_entry="Sell", stop=shortSL, limit=shortTP)
 
 if biasDir == -1 and strategy.position_size > 0
-    strategy.close("Buy", comment = "Bias flip")
+    strategy.close("Buy", comment="Bias flip")
 if biasDir == 1 and strategy.position_size < 0
-    strategy.close("Sell", comment = "Bias flip")
+    strategy.close("Sell", comment="Bias flip")
 
-// ═══════════════════════════════════════════════════════════════════════════
-// VISUALS
-// ═══════════════════════════════════════════════════════════════════════════
-bgcolor(biasDir == 1 ? color.new(color.green, 94) : biasDir == -1 ? color.new(color.red, 94) : na, title = "Bias")
+// —— Visuals ——
+bgcolor(biasDir == 1 ? color.new(color.green, 94) : biasDir == -1 ? color.new(color.red, 94) : na)
+plotshape(showSig and longCond, style=shape.triangleup, location=location.belowbar, color=color.lime, size=size.small, text="BUY")
+plotshape(showSig and shortCond, style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small, text="SELL")
+plotshape(showSweep and hasSweep1 and not na(sweep1Bar) and bar_index == sweep1Bar, style=shape.xcross, location=location.abovebar, color=color.orange, size=size.tiny, text="S1")
+plotshape(showSweep and hasSweep2 and not na(sweep2Bar) and bar_index == sweep2Bar, style=shape.xcross, location=location.abovebar, color=color.yellow, size=size.tiny, text="S2")
+plot(showOB and not na(obTop) ? obTop : na, "OB Top", color=color.new(color.teal, 30), style=plot.style_linebr)
+plot(showOB and not na(obBot) ? obBot : na, "OB Bot", color=color.new(color.teal, 30), style=plot.style_linebr)
 
-plotshape(showSig and longCond, title = "Buy", style = shape.triangleup, location = location.belowbar, color = color.new(color.lime, 0), size = size.small, text = "BUY")
-plotshape(showSig and shortCond, title = "Sell", style = shape.triangledown, location = location.abovebar, color = color.new(color.red, 0), size = size.small, text = "SELL")
-
-plotshape(showSweep and hasSweep1 and not na(sweep1Bar) and bar_index == sweep1Bar, title = "Sweep1", style = shape.xcross, location = location.abovebar, color = color.orange, size = size.tiny, text = "S1")
-plotshape(showSweep and hasSweep2 and not na(sweep2Bar) and bar_index == sweep2Bar, title = "Sweep2", style = shape.xcross, location = location.abovebar, color = color.yellow, size = size.tiny, text = "S2")
-
-plot(showOB and not na(obTop) ? obTop : na, "OB Top", color = color.new(color.teal, 30), style = plot.style_linebr, linewidth = 1)
-plot(showOB and not na(obBot) ? obBot : na, "OB Bot", color = color.new(color.teal, 30), style = plot.style_linebr, linewidth = 1)
-
-var table dash = table.new(position.top_right, 2, 11, bgcolor = color.new(color.black, 70), border_width = 1)
+var table dash = table.new(position.top_right, 2, 10, bgcolor=color.new(color.black, 70), border_width=1)
 if barstate.islast
-    table.cell(dash, 0, 0, "Gadna SMC v6", text_color = color.white, text_size = size.small)
-    table.cell(dash, 1, 0, modeIn, text_color = color.aqua, text_size = size.small)
-    table.cell(dash, 0, 1, "Bias", text_color = color.gray, text_size = size.tiny)
-    table.cell(dash, 1, 1, biasDir == 1 ? "BUYERS" : biasDir == -1 ? "SELLERS" : "—", text_color = biasDir == 1 ? color.lime : biasDir == -1 ? color.red : color.gray, text_size = size.small)
-    table.cell(dash, 0, 2, "Skill8", text_color = color.gray, text_size = size.tiny)
-    table.cell(dash, 1, 2, skill8Ok ? "OK" : "BLOCK", text_color = skill8Ok ? color.lime : color.red, text_size = size.small)
-    table.cell(dash, 0, 3, "Near OB", text_color = color.gray, text_size = size.tiny)
-    table.cell(dash, 1, 3, nearOB ? "YES" : "no", text_color = nearOB ? color.lime : color.gray, text_size = size.small)
-    table.cell(dash, 0, 4, "Sweep1/2", text_color = color.gray, text_size = size.tiny)
-    table.cell(dash, 1, 4, (hasSweep1 ? "1" : "-") + "/" + (hasSweep2 ? "2" : "-"), text_color = color.orange, text_size = size.small)
-    table.cell(dash, 0, 5, "Body C2", text_color = color.gray, text_size = size.tiny)
-    table.cell(dash, 1, 5, bodyConfirmBuy or bodyConfirmSell ? "YES" : "wait", text_color = bodyConfirmBuy or bodyConfirmSell ? color.lime : color.gray, text_size = size.small)
-    table.cell(dash, 0, 6, "Score L/S", text_color = color.gray, text_size = size.tiny)
-    table.cell(dash, 1, 6, str.tostring(scoreLong) + "/" + str.tostring(scoreShort), text_color = color.white, text_size = size.small)
-    table.cell(dash, 0, 7, "Min RR / Lot", text_color = color.gray, text_size = size.tiny)
-    table.cell(dash, 1, 7, str.tostring(minRR) + " / " + str.tostring(lotSize), text_color = color.white, text_size = size.small)
-    table.cell(dash, 0, 8, "Chain", text_color = color.gray, text_size = size.tiny)
-    table.cell(dash, 1, 8, rBias + "→" + rOB + "→" + rBody, text_color = color.aqua, text_size = size.tiny)
-    table.cell(dash, 0, 9, "Asset", text_color = color.gray, text_size = size.tiny)
-    table.cell(dash, 1, 9, isGold ? "Gold" : "FX/BTC", text_color = color.white, text_size = size.small)
+    table.cell(dash, 0, 0, "Gadna SMC v6", text_color=color.white, text_size=size.small)
+    table.cell(dash, 1, 0, modeIn, text_color=color.aqua, text_size=size.small)
+    table.cell(dash, 0, 1, "Bias", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 1, biasDir == 1 ? "BUYERS" : biasDir == -1 ? "SELLERS" : "-", text_color=biasDir == 1 ? color.lime : biasDir == -1 ? color.red : color.gray, text_size=size.small)
+    table.cell(dash, 0, 2, "Skill8", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 2, skill8Ok ? "OK" : "BLOCK", text_color=skill8Ok ? color.lime : color.red, text_size=size.small)
+    table.cell(dash, 0, 3, "Near OB", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 3, nearOB ? "YES" : "no", text_color=nearOB ? color.lime : color.gray, text_size=size.small)
+    table.cell(dash, 0, 4, "Sweep", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 4, (hasSweep1 ? "1" : "-") + "/" + (hasSweep2 ? "2" : "-"), text_color=color.orange, text_size=size.small)
+    table.cell(dash, 0, 5, "Body C2", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 5, bodyConfirmBuy or bodyConfirmSell ? "YES" : "wait", text_color=bodyConfirmBuy or bodyConfirmSell ? color.lime : color.gray, text_size=size.small)
+    table.cell(dash, 0, 6, "Score L/S", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 6, str.tostring(scoreLong) + "/" + str.tostring(scoreShort), text_color=color.white, text_size=size.small)
+    table.cell(dash, 0, 7, "RR / Lot", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 7, str.tostring(minRR) + " / " + str.tostring(lotSize), text_color=color.white, text_size=size.small)
+    table.cell(dash, 0, 8, "Chain", text_color=color.gray, text_size=size.tiny)
+    table.cell(dash, 1, 8, rBias + "->" + rOB + "->" + rBody, text_color=color.aqua, text_size=size.tiny)
 
-alertcondition(longCond, title = "Gadna Buy", message = "Gadna BUY body-close confirmed")
-alertcondition(shortCond, title = "Gadna Sell", message = "Gadna SELL body-close confirmed")
+alertcondition(longCond, title="Gadna Buy", message="Gadna BUY body-close confirmed")
+alertcondition(shortCond, title="Gadna Sell", message="Gadna SELL body-close confirmed")

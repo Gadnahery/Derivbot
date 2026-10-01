@@ -11,6 +11,29 @@ const {
 
 export default async function handler(req, res) {
   try {
+    // Optional live balance pull from Deriv
+    if (String(req.query.refresh || "") === "1") {
+      try {
+        const { DerivClient } = require("../../lib/deriv");
+        const { getSetting, setSetting } = require("../../lib/supabase");
+        const mode = (await getSetting("accountMode", "demo")) === "live" ? "live" : "demo";
+        const deriv = new DerivClient({ accountMode: mode });
+        await deriv.authorize();
+        await deriv.refreshBalance();
+        await setSetting("accountSnap", {
+          loginid: deriv.loginid,
+          balance: deriv.balance,
+          currency: deriv.currency,
+          isDemo: !!deriv.isDemo,
+          mode,
+          at: new Date().toISOString(),
+        });
+        deriv.close();
+      } catch (e) {
+        console.error("status balance refresh", e.message);
+      }
+    }
+
     const [journal, scans, trades, open, openTrades, stats, signals, accountMode, accountSnap] = await Promise.all([
       getRecentJournal(100),
       getRecentScans(100),

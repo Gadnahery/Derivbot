@@ -116,7 +116,7 @@ export default function PipelinePage() {
     <Layout
       scanning={scanning}
       onScan={runScan}
-      onRefresh={load}
+      onRefresh={() => load({ refresh: true })}
       statusLabel={statusLabel}
       scalpMode={scalpMode}
       onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount} balance={balance} currency={currency} accountId={accountId}

@@ -63,7 +63,7 @@ export default function SignalsPage() {
   }
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount} balance={balance} currency={currency} accountId={accountId}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={() => load({ refresh: true })} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount} balance={balance} currency={currency} accountId={accountId}>
       <h1 style={{ margin: "0 0 6px", fontSize: 22 }}>MT5 Signals</h1>
       <p style={{ margin: "0 0 14px", opacity: 0.55, fontSize: 13, maxWidth: 720 }}>
         Currency + gold + BTC only (no Deriv synthetics). When a full setup passes Skills 1–10 and ≥3R,

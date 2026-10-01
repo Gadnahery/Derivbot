@@ -40,7 +40,7 @@ export default function JournalPage() {
   const journal = data?.journal || [];
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount} balance={balance} currency={currency} accountId={accountId}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={() => load({ refresh: true })} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount} balance={balance} currency={currency} accountId={accountId}>
       <h1 style={{ margin: "0 0 6px", fontSize: 22 }}>Activity</h1>
       <p style={{ margin: "0 0 16px", opacity: 0.55, fontSize: 13, maxWidth: 720 }}>
         Plain-language feed. “Reading this symbol” means the bot is checking structure — not that it entered a trade.

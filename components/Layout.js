@@ -228,7 +228,7 @@ export default function Layout({ children, scanning, onScan, onRefresh, statusLa
             </span>
           </div>
 
-          <button type="button" style={S.btnGhost} onClick={onRefresh}>Refresh data</button>
+          <button type="button" style={S.btnGhost} onClick={onRefresh}>Refresh balance</button>
           <button type="button" style={S.btnPrimary} onClick={onScan} disabled={scanning}>
             {scanning ? "Scanning…" : "Run scan now"}
           </button>

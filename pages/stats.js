@@ -24,7 +24,7 @@ export default function StatsPage() {
   }, [trades]);
 
   return (
-    <Layout scanning={scanning} onScan={runScan} onRefresh={load} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount} balance={balance} currency={currency} accountId={accountId}>
+    <Layout scanning={scanning} onScan={runScan} onRefresh={() => load({ refresh: true })} statusLabel={statusLabel} scalpMode={scalpMode} onToggleScalp={toggleScalp} accountMode={accountMode} onSetAccount={setAccount} balance={balance} currency={currency} accountId={accountId}>
       <h1 style={{ margin: "0 0 6px", fontSize: 22 }}>Performance</h1>
       <p style={{ margin: "0 0 16px", opacity: 0.55, fontSize: 13 }}>
         Aggregates from stored trades. Review tomorrow before changing any strategy filters.

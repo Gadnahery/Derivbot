@@ -39,6 +39,21 @@ export default async function handler(req, res) {
   let tradePlaced = null;
   let openManaged = null;
 
+
+    async function snapAccount(deriv, accountMode) {
+      try {
+        await deriv.refreshBalance();
+      } catch {}
+      await setSetting("accountSnap", {
+        loginid: deriv.loginid,
+        balance: deriv.balance,
+        currency: deriv.currency,
+        isDemo: !!deriv.isDemo,
+        mode: accountMode,
+        at: new Date().toISOString(),
+      });
+    }
+
   try {
     const qMode = String(req.query.account || (req.body && req.body.account) || "").toLowerCase();
     const stored = await getSetting("accountMode", "demo");
@@ -58,14 +73,7 @@ export default async function handler(req, res) {
       status: "ok",
       message: `Authorized ${deriv.loginid} balance=${deriv.balance} ${deriv.currency} · ${deriv.isDemo ? "DEMO" : "LIVE"}`,
     });
-    await setSetting("accountSnap", {
-      loginid: deriv.loginid,
-      balance: deriv.balance,
-      currency: deriv.currency,
-      isDemo: !!deriv.isDemo,
-      mode: accountMode,
-      at: new Date().toISOString(),
-    });
+    await snapAccount(deriv, accountMode);
 
     // Manage ALL open trades
     const opens = await getOpenTrades();
@@ -300,6 +308,7 @@ export default async function handler(req, res) {
               symbol: info.symbol,
               message: `LIVE FILL ${bought.contractId} ${bought.contract_type || setup.side} ${setup.duration}${setup.durationUnit} stake=${setup.stake || 0.35} · ${accountMode}`,
             });
+            await snapAccount(deriv, accountMode);
           } catch (err) {
             tradePlaced = await saveTrade({
               ...setup,
@@ -332,6 +341,8 @@ export default async function handler(req, res) {
       }
     }
 
+    await snapAccount(deriv, accountMode);
+    const bal = deriv.balance;
     deriv.close();
     return res.status(200).json({
       ok: true,
@@ -339,6 +350,13 @@ export default async function handler(req, res) {
       results,
       tradePlaced,
       openManaged,
+      account: {
+        mode: accountMode,
+        loginid: deriv.loginid,
+        balance: bal,
+        currency: deriv.currency,
+        isDemo: !!deriv.isDemo,
+      },
     });
   } catch (err) {
     try {

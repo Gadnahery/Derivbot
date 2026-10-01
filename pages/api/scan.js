@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   }
 
   // Rise/Fall synthetics only
-  const MAX_OPEN = 1;
+  const MAX_OPEN = 2;
   const modes = ["risefall"];
   const started = Date.now();
   const results = [];

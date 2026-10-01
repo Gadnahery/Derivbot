@@ -1,5 +1,5 @@
 /* Strategy Desk service worker — offline shell + push */
-const CACHE = "stratdesk-v3";
+const CACHE = "stratdesk-v4";
 const ASSETS = ["/", "/signals", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {

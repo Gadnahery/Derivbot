@@ -37,7 +37,7 @@ export default function Layout({ children, scanning, onScan, onRefresh, statusLa
   return (
     <div className="desk-shell" style={S.shell}>
       {!wide && (
-        <header className="desk-topbar" style={S.topbar}>
+        <header className="desk-topbar" style={{ ...S.topbar, flexWrap: "wrap", height: "auto", minHeight: 52, paddingBottom: 8 }}>
           <button type="button" aria-label="Menu" onClick={() => setMenuOpen((v) => !v)} style={S.iconBtn}>
             {menuOpen ? "✕" : "☰"}
           </button>

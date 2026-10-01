@@ -1,5 +1,5 @@
 const { DerivClient } = require("../../lib/deriv");
-const { WATCHLIST, MIN_STAKE, MIN_SCORE, scanSymbol } = require("../../lib/strategy");
+const { WATCHLIST, MIN_STAKE, MIN_SCORE, scanRiseFall, RF_STAKE } = require("../../lib/strategy");
 const {
   logEvent,
   saveScanResult,
@@ -21,11 +21,7 @@ export const config = {
 
 const TF_GRAN = {
   m1: 60,
-  m3: 180,
   m5: 300,
-  m15: 900,
-  h1: 3600,
-  h4: 14400,
 };
 
 export default async function handler(req, res) {
@@ -33,12 +29,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const modeRaw = String(req.query.mode || (req.body && req.body.mode) || "both").toLowerCase();
-  const modes =
-    modeRaw === "scalp" ? ["scalp"] :
-    modeRaw === "standard" ? ["standard"] :
-    ["standard", "scalp"];
+  // Rise/Fall synthetics only
   const MAX_OPEN = 5;
+  const modes = ["risefall"];
   const started = Date.now();
   const results = [];
   let tradePlaced = null;
@@ -51,7 +44,7 @@ export default async function handler(req, res) {
     await logEvent({
       stage: "mode",
       status: "ok",
-      message: `Scan modes=${modes.join("+")} · maxOpen=${MAX_OPEN}`,
+      message: `Rise/Fall synthetics · maxOpen=${MAX_OPEN}`,
     });
 
     await logEvent({
@@ -143,7 +136,7 @@ export default async function handler(req, res) {
           frames[tf] = await deriv.fetchCandles(
             info.symbol,
             gran,
-            tf === "m1" ? 120 : tf === "h4" ? 80 : 100
+            tf === "m1" ? 80 : 60
           );
         }
 
@@ -151,7 +144,7 @@ export default async function handler(req, res) {
           openCount = (await getOpenTrades()).length;
           if (openCount >= MAX_OPEN) break;
 
-          const { setup, log, bias } = scanSymbol(info, frames, mode);
+          const { setup, log, bias } = scanRiseFall(info, frames);
 
           for (const line of log || []) {
             await logEvent({
@@ -198,14 +191,7 @@ export default async function handler(req, res) {
           const criteria = {
             system: "SMC/ICT Skills 1-10",
             mode,
-            chain:
-              mode === "scalp"
-                ? info.chain === "gold"
-                  ? "1H→3m→1m scalp"
-                  : "1H→5m→1m scalp"
-                : info.chain === "gold"
-                ? "4H→1H→5m→3m→1m"
-                : "4H→1H→15m→5m→1m",
+            chain: "Synthetic Rise/Fall · 5m bias · 1m body (Skill 9)",
             steps: (log || []).map((l) => ({
               stage: l.stage,
               status: l.status,
@@ -267,11 +253,12 @@ export default async function handler(req, res) {
           }
 
           try {
-            const bought = await deriv.proposalAndBuy(
+            const bought = await deriv.buyRiseFall(
               setup.side,
               setup.symbol,
-              MIN_STAKE,
-              setup.rr
+              setup.stake || RF_STAKE || MIN_STAKE || 1,
+              setup.duration || 5,
+              setup.durationUnit || "t"
             );
             tradePlaced = await saveTrade({
               ...setup,

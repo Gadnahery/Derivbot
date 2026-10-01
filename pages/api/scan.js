@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   }
 
   // Rise/Fall synthetics only
-  const MAX_OPEN = 5;
+  const MAX_OPEN = 2;
   const modes = ["risefall"];
   const started = Date.now();
   const results = [];
@@ -75,8 +75,8 @@ export default async function handler(req, res) {
         const m1 = await deriv.fetchCandles(open.symbol, 60, 5);
         const price = m1.length ? m1[m1.length - 1].close : null;
         if (price == null) continue;
-        const { unrealized, hit, settledPnl, rMultiple } = computePnl(open, price);
-        if (hit) {
+        const { unrealized, hit, settledPnl, rMultiple, ready } = computePnl(open, price);
+        if (hit && ready !== false) {
           const settled = await updateTrade(open.id, {
             status: hit,
             exit_price: price,
@@ -90,7 +90,7 @@ export default async function handler(req, res) {
             stage: "settle",
             status: hit === "won" ? "ok" : "fail",
             symbol: open.symbol,
-            message: `Trade ${hit.toUpperCase()} @ ${price} · PnL ${settledPnl >= 0 ? "+" : ""}${Number(settledPnl).toFixed(2)} USD (${rMultiple.toFixed(2)}R)`,
+            message: `RF ${hit.toUpperCase()} ${open.side} @ ${price} (entry ${open.entry}) · PnL ${settledPnl >= 0 ? "+" : ""}${Number(settledPnl).toFixed(2)}`,
           });
         } else {
           const updated = await updateTrade(open.id, {
@@ -102,7 +102,7 @@ export default async function handler(req, res) {
             stage: "mark",
             status: "ok",
             symbol: open.symbol,
-            message: `Open ${open.side} mark ${price} · uPnL ${unrealized >= 0 ? "+" : ""}${unrealized.toFixed(2)} USD (${rMultiple.toFixed(2)}R)`,
+            message: `Open ${open.side} mark ${price} vs entry ${open.entry} · waiting expiry`,
           });
         }
       } catch (e) {
@@ -274,15 +274,23 @@ export default async function handler(req, res) {
               setup.duration || 5,
               setup.durationUnit || "t"
             );
+            const dur = setup.duration || 1;
+            const unit = setup.durationUnit || "m";
+            const durMs = unit === "t" ? dur * 2000 : unit === "s" ? dur * 1000 : dur * 60000;
+            const expires_at = new Date(Date.now() + durMs + 3000).toISOString();
             tradePlaced = await saveTrade({
               ...setup,
-              stake: MIN_STAKE,
+              stake: setup.stake || MIN_STAKE || 0.35,
               status: "open",
               contractId: bought.contractId,
               note: `key:${key}`,
               execution: "live",
               current_price: setup.entry,
               unrealized_pnl: 0,
+              expires_at,
+              duration: dur,
+              durationUnit: unit,
+              mode: "RISEFALL",
             });
             seen.add(key);
             openCount += 1;
@@ -295,13 +303,14 @@ export default async function handler(req, res) {
           } catch (err) {
             tradePlaced = await saveTrade({
               ...setup,
-              stake: MIN_STAKE,
+              stake: setup.stake || MIN_STAKE || 0.35,
               status: "paper",
               note: `key:${key} | paper: ${err.message}`,
               execution: "paper",
               current_price: setup.entry,
               unrealized_pnl: 0,
               pnl: null,
+              mode: "RISEFALL",
             });
             seen.add(key);
             await logEvent({

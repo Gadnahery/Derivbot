@@ -13,6 +13,7 @@ const {
   markSignalNotified,
   getClient,
   getSetting,
+  setSetting,
 } = require("../../lib/supabase");
 const { sendPushToAll, buildSignalPayload } = require("../../lib/push");
 
@@ -56,6 +57,14 @@ export default async function handler(req, res) {
       stage: "auth",
       status: "ok",
       message: `Authorized ${deriv.loginid} balance=${deriv.balance} ${deriv.currency} · ${deriv.isDemo ? "DEMO" : "LIVE"}`,
+    });
+    await setSetting("accountSnap", {
+      loginid: deriv.loginid,
+      balance: deriv.balance,
+      currency: deriv.currency,
+      isDemo: !!deriv.isDemo,
+      mode: accountMode,
+      at: new Date().toISOString(),
     });
 
     // Manage ALL open trades

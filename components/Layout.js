@@ -12,7 +12,7 @@ const NAV = [
   { href: "/stats", label: "Performance", tip: "Win rate & totals" },
 ];
 
-export default function Layout({ children, scanning, onScan, onRefresh, statusLabel, scalpMode, onToggleScalp, accountMode, onSetAccount }) {
+export default function Layout({ children, scanning, onScan, onRefresh, statusLabel, scalpMode, onToggleScalp, accountMode, onSetAccount, balance, currency, accountId }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [wide, setWide] = useState(true);
@@ -47,6 +47,66 @@ export default function Layout({ children, scanning, onScan, onRefresh, statusLa
               {scanning ? "SCANNING…" : statusLabel || "STANDBY"}
             </div>
           </div>
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            {typeof onSetAccount === "function" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSetAccount("demo")}
+                  style={{
+                    background: (accountMode || "demo") !== "live" ? "#1a7f4b" : "#121820",
+                    color: "#fff",
+                    border: "1px solid #243044",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontWeight: 800,
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  DEMO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined" && window.confirm("Switch to LIVE? Real money will be used.")) {
+                      onSetAccount("live");
+                    }
+                  }}
+                  style={{
+                    background: accountMode === "live" ? "#8b1e2d" : "#121820",
+                    color: "#fff",
+                    border: "1px solid #243044",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontWeight: 800,
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  LIVE
+                </button>
+              </>
+            )}
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "6px 10px",
+                borderRadius: 8,
+                background: "#0d1117",
+                border: "1px solid #243044",
+                color: accountMode === "live" ? "#f07178" : "#3dd68c",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {(accountMode || "demo").toUpperCase()}
+              {balance != null && balance !== "" ? ` · ${Number(balance).toFixed(2)} ${currency || "USD"}` : ""}
+              {accountId ? ` · ${accountId}` : ""}
+            </span>
+          </div>
+
           <button type="button" style={S.scanBtnSm} onClick={onScan} disabled={scanning}>
             {scanning ? "…" : "Scan"}
           </button>
@@ -108,6 +168,66 @@ export default function Layout({ children, scanning, onScan, onRefresh, statusLa
               {scalpMode ? "Scalp mode ON" : "Scalp mode OFF"}
             </button>
           )}
+
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+            {typeof onSetAccount === "function" && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onSetAccount("demo")}
+                  style={{
+                    background: (accountMode || "demo") !== "live" ? "#1a7f4b" : "#121820",
+                    color: "#fff",
+                    border: "1px solid #243044",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontWeight: 800,
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  DEMO
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (typeof window !== "undefined" && window.confirm("Switch to LIVE? Real money will be used.")) {
+                      onSetAccount("live");
+                    }
+                  }}
+                  style={{
+                    background: accountMode === "live" ? "#8b1e2d" : "#121820",
+                    color: "#fff",
+                    border: "1px solid #243044",
+                    borderRadius: 8,
+                    padding: "6px 10px",
+                    fontWeight: 800,
+                    fontSize: 11,
+                    cursor: "pointer",
+                  }}
+                >
+                  LIVE
+                </button>
+              </>
+            )}
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                padding: "6px 10px",
+                borderRadius: 8,
+                background: "#0d1117",
+                border: "1px solid #243044",
+                color: accountMode === "live" ? "#f07178" : "#3dd68c",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {(accountMode || "demo").toUpperCase()}
+              {balance != null && balance !== "" ? ` · ${Number(balance).toFixed(2)} ${currency || "USD"}` : ""}
+              {accountId ? ` · ${accountId}` : ""}
+            </span>
+          </div>
+
           <button type="button" style={S.btnGhost} onClick={onRefresh}>Refresh data</button>
           <button type="button" style={S.btnPrimary} onClick={onScan} disabled={scanning}>
             {scanning ? "Scanning…" : "Run scan now"}

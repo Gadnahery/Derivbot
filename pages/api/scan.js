@@ -32,7 +32,7 @@ export default async function handler(req, res) {
   }
 
   // Rise/Fall synthetics only
-  const MAX_OPEN = 2;
+  const MAX_OPEN = 1;
   const modes = ["risefall"];
   const started = Date.now();
   const results = [];
@@ -82,13 +82,42 @@ export default async function handler(req, res) {
       try {
         const m1 = await deriv.fetchCandles(open.symbol, 60, 5);
         const price = m1.length ? m1[m1.length - 1].close : null;
-        if (price == null) continue;
-        const { unrealized, hit, settledPnl, rMultiple, ready } = computePnl(open, price);
-        if (hit && ready !== false) {
+
+        // Prefer REAL Deriv contract result (fixes false losses from late price marks)
+        let hit = null;
+        let settledPnl = null;
+        let exitPrice = price;
+        let source = "price";
+
+        const cid = open.contract_id;
+        const expiresAt = open.expires_at ? new Date(open.expires_at).getTime() : 0;
+        const openedAt = open.at ? new Date(open.at).getTime() : 0;
+        const pastExpiry = expiresAt ? Date.now() >= expiresAt : Date.now() - openedAt > 70000;
+
+        if (cid && pastExpiry) {
+          const cr = await deriv.getContractResult(cid);
+          if (cr && cr.hit) {
+            hit = cr.hit;
+            settledPnl = cr.profit != null ? Number(cr.profit) : hit === "won" ? Number(open.stake || 0.35) * 0.85 : -Number(open.stake || 0.35);
+            if (cr.exitPrice != null) exitPrice = cr.exitPrice;
+            source = "deriv_contract";
+          }
+        }
+
+        if (!hit && price != null && pastExpiry) {
+          const r = computePnl(open, price);
+          if (r.hit && r.ready !== false) {
+            hit = r.hit;
+            settledPnl = r.settledPnl;
+            source = "price_fallback";
+          }
+        }
+
+        if (hit) {
           const settled = await updateTrade(open.id, {
             status: hit,
-            exit_price: price,
-            current_price: price,
+            exit_price: exitPrice,
+            current_price: exitPrice,
             pnl: settledPnl,
             unrealized_pnl: 0,
             settled_at: new Date().toISOString(),
@@ -98,19 +127,20 @@ export default async function handler(req, res) {
             stage: "settle",
             status: hit === "won" ? "ok" : "fail",
             symbol: open.symbol,
-            message: `RF ${hit.toUpperCase()} ${open.side} @ ${price} (entry ${open.entry}) · PnL ${settledPnl >= 0 ? "+" : ""}${Number(settledPnl).toFixed(2)}`,
+            message: `RF ${hit.toUpperCase()} ${open.side} via ${source} · exit ${exitPrice} entry ${open.entry} · PnL ${settledPnl >= 0 ? "+" : ""}${Number(settledPnl).toFixed(2)}`,
           });
-        } else {
+        } else if (price != null) {
+          const r = computePnl(open, price);
           const updated = await updateTrade(open.id, {
             current_price: price,
-            unrealized_pnl: unrealized,
+            unrealized_pnl: r.unrealized,
           });
           managed.push(updated);
           await logEvent({
             stage: "mark",
             status: "ok",
             symbol: open.symbol,
-            message: `Open ${open.side} mark ${price} vs entry ${open.entry} · waiting expiry`,
+            message: `Open ${open.side} mark ${price} vs entry ${open.entry} · waiting expiry/contract`,
           });
         }
       } catch (e) {
